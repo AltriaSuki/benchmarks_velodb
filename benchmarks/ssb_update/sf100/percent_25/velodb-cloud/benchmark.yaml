@@ -24,3 +24,7 @@ paths:
   query_mode: "line"
   query_dirs:
     - "query/"
+storage:
+  endpoint: "${STORAGE_ENDPOINT:-https://oss-cn-beijing-internal.aliyuncs.com}"
+  region: "${STORAGE_REGION:-oss-cn-beijing}"
+  bucket: "${STORAGE_BUCKET:-bench-dataset-cn}"

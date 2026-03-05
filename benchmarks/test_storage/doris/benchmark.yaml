@@ -1,0 +1,14 @@
+engine:
+  type: doris
+  connection:
+    fe_host: "127.0.0.1"
+    fe_query_port: 9030
+    user: "root"
+    password: ""
+    db: "test_db"
+paths:
+  load_dir: "load"
+storage:
+  endpoint: "${STORAGE_ENDPOINT:-https://oss-cn-beijing-internal.aliyuncs.com}"
+  region: "${STORAGE_REGION:-oss-cn-beijing}"
+  bucket: "${STORAGE_BUCKET:-bench-dataset-cn}"
