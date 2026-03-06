@@ -49,7 +49,7 @@ die() {
 # TODO(zgx): move this function to lib dir and install all dependencies
 check_dependencies() {
     echo "Checking dependencies..."
-    local cmds=("jq" "bc")
+    local cmds=("jq" "bc" "yq" "envsubst")
     local missing_deps=()
     for cmd in "${cmds[@]}"; do
         if ! command -v "$cmd" >/dev/null 2>&1; then

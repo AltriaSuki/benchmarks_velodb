@@ -29,7 +29,7 @@ Our goal is to build `benchmarks.velodb.com` into the industry's most trusted an
 ## Quick Start
 
 ### Dependencies
-- yq, jq, bc
+- yq, jq, bc, envsubst
 - [Jmeter](https://jmeter.apache.org) (optional, only needed for running JMeter tests)
 
 ### Benchmark Workflow
