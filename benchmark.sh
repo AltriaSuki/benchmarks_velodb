@@ -597,7 +597,6 @@ run_analyze() {
     echo "Running analysis..."
     local raw_analyze_sql
     raw_analyze_sql=$(yq eval -r '.paths.analyze // "analyze/analyze.sql"' "$CONFIG_FILE")
-
     local analyze_sql
     analyze_sql="$(eval "printf '%s' \"$raw_analyze_sql\"")"
     
