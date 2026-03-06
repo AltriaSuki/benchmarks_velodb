@@ -16,6 +16,32 @@ TEST_ROOT=""
 ENGINE_TYPE=""
 RESULT_DIR=""
 TIMESTAMP=""
+TEMP_FILES=()
+LAST_TEMP_FILE=""
+
+# Track and clean temporary files created by this script.
+register_temp_file() {
+    TEMP_FILES+=("$1")
+}
+
+cleanup_temp_files() {
+    local tmp
+    for tmp in "${TEMP_FILES[@]:-}"; do
+        [ -n "$tmp" ] && rm -f -- "$tmp"
+    done
+}
+
+create_temp_sql_file() {
+    local prefix="$1"
+    local safe_prefix
+    local tmp_file
+    safe_prefix="${prefix//[^a-zA-Z0-9_.-]/_}"
+    tmp_file="$(mktemp "${TMPDIR:-/tmp}/bench_${safe_prefix}.XXXXXX.sql")" || die "Failed to create temporary file"
+    register_temp_file "$tmp_file"
+    LAST_TEMP_FILE="$tmp_file"
+}
+
+trap cleanup_temp_files EXIT
 
 # Load modular components
 source "$SCRIPT_DIR/lib/tools_utils.sh"
@@ -49,7 +75,7 @@ die() {
 # TODO(zgx): move this function to lib dir and install all dependencies
 check_dependencies() {
     echo "Checking dependencies..."
-    local cmds=("jq" "bc" "yq" "envsubst")
+    local cmds=("jq" "bc" "yq" "envsubst" "mktemp")
     local missing_deps=()
     for cmd in "${cmds[@]}"; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -269,7 +295,9 @@ run_ddl() {
     echo "Running DDL."
     
     # Keep DDL behavior consistent with load phase so ${STORAGE_*} works in DDL SQL.
-    local tmp_sql="/tmp/.tmp_ddl_$$.sql"
+    local tmp_sql
+    create_temp_sql_file "ddl"
+    tmp_sql="$LAST_TEMP_FILE"
     envsubst < "$ddl_path" > "$tmp_sql"
     if ! engine_run_sql_file "$tmp_sql"; then
         rm -f "$tmp_sql"
@@ -342,7 +370,9 @@ run_load() {
             fi
         elif [[ "$load_file" == *.sql ]]; then
             # Pre-process SQL using envsubst to inject STORAGE_* configs
-            local tmp_sql="/tmp/.tmp_load_${table_name}_$$.sql"
+            local tmp_sql
+            create_temp_sql_file "load_${table_name}"
+            tmp_sql="$LAST_TEMP_FILE"
             envsubst < "$load_file" > "$tmp_sql"
             
             if ! engine_run_sql_file "$tmp_sql"; then
@@ -580,7 +610,9 @@ run_analyze() {
     fi
     
     
-    local tmp_sql="/tmp/.tmp_analyze_$$.sql"
+    local tmp_sql
+    create_temp_sql_file "analyze"
+    tmp_sql="$LAST_TEMP_FILE"
     envsubst < "$analyze_sql" > "$tmp_sql"
 
     if engine_run_sql_file "$tmp_sql"; then
