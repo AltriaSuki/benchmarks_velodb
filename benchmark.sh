@@ -596,17 +596,26 @@ run_query() {
 run_analyze() {
     echo "Running analysis..."
     local raw_analyze_sql
-    raw_analyze_sql=$(yq eval '.paths.analyze // "analyze/analyze.sql"' "$CONFIG_FILE")
+    raw_analyze_sql=$(yq eval -r '.paths.analyze // "analyze/analyze.sql"' "$CONFIG_FILE")
+
     local analyze_sql
-    analyze_sql="$(eval echo "$raw_analyze_sql")"
-    
-    if [[ "$analyze_sql" != /* ]]; then
-        analyze_sql="$TEST_ROOT/$analyze_sql"
-    fi
+    analyze_sql="$(eval "printf '%s' \"$raw_analyze_sql\"")"
     
     if [ -z "$analyze_sql" ] || [ "$analyze_sql" = "null" ]; then
         echo "No analysis SQL provided, skipping"
         return 0
+    fi
+
+    if [[ "$analyze_sql" == *'${'* ]]; then
+        die "Unresolved variable in analyze path: $raw_analyze_sql"
+    fi
+
+    if [[ "$analyze_sql" != /* ]]; then
+        analyze_sql="$TEST_ROOT/$analyze_sql"
+    fi
+
+    if [ ! -f "$analyze_sql" ]; then
+        die "Analysis SQL file not found: $analyze_sql"
     fi
     
     
