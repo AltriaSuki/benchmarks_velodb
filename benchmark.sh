@@ -197,10 +197,17 @@ load_config() {
     done
 
     # Export paths (scalar values only)
-    for key in ddl session load_dir analyze query_mode; do
+    for key in ddl load_dir query_mode; do
         value=$(yq eval ".paths.$key // \"\"" "$CONFIG_FILE")
         [ -n "$value" ] && [ "$value" != "null" ] && export "$key=$(eval echo "$value")"
     done
+
+    # Export file paths with uppercase env var names
+    value=$(yq eval ".paths.session_file // \"\"" "$CONFIG_FILE")
+    [ -n "$value" ] && [ "$value" != "null" ] && export "SESSION_FILE=$(eval echo "$value")"
+
+    value=$(yq eval ".paths.analyze_file // \"\"" "$CONFIG_FILE")
+    [ -n "$value" ] && [ "$value" != "null" ] && export "ANALYZE_FILE=$(eval echo "$value")"
 
     # Set TEST_ROOT for engine access
     export TEST_ROOT
@@ -301,7 +308,7 @@ run_ddl() {
 }
 
 run_session() {
-    local session_file="${session:-session/session.sql}"
+    local session_file="${SESSION_FILE:-session/session.sql}"
 
     # Convert relative path to absolute
     if [[ "$session_file" != /* ]]; then
@@ -395,15 +402,7 @@ run_load() {
 
 # Run benchmark queries
 run_query() {
-    local query_dirs
-    while IFS= read -r line; do
-        query_dirs+=("$line")
-    done < <(yq eval '.paths.query_dirs[]?' "$CONFIG_FILE")
-
-    if [ ${#query_dirs[@]} -eq 0 ]; then
-        echo "No query directories specified, skipping query execution"
-        return 0
-    fi
+    local query_dirs=("query/")
 
     # Collect all queries first
     local -a all_query_names=()
@@ -588,7 +587,7 @@ run_query() {
 
 run_analyze() {
     echo "Running analysis..."
-    local analyze_sql="${analyze:-analyze/analyze.sql}"
+    local analyze_sql="${ANALYZE_FILE:-analyze/analyze.sql}"
 
     if [ -z "$analyze_sql" ] || [ "$analyze_sql" = "null" ]; then
         echo "No analysis SQL provided, skipping"

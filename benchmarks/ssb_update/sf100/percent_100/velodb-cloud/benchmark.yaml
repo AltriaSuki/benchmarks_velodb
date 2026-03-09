@@ -22,8 +22,6 @@ paths:
   ddl: "ddl/ddl.sql"
   load_dir: "load/"
   query_mode: "line"
-  query_dirs:
-    - "query/"
 storage:
   endpoint: "${STORAGE_ENDPOINT:-https://s3.us-east-1.amazonaws.com}"
   region: "${STORAGE_REGION:-us-east-1}"
