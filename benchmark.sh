@@ -197,20 +197,14 @@ load_config() {
     done
 
     # Export paths (scalar values only)
-    for key in ddl load_dir query_mode; do
+    for key in ddl load_dir query_mode session_file analyze_file query_dir; do
         value=$(yq eval ".paths.$key // \"\"" "$CONFIG_FILE")
-        [ -n "$value" ] && [ "$value" != "null" ] && export "$key=$(eval echo "$value")"
+        if [ -n "$value" ] && [ "$value" != "null" ]; then
+            # Convert key to uppercase for env var name
+            env_var=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+            export "$env_var=$(eval echo "$value")"
+        fi
     done
-
-    # Export file paths with uppercase env var names
-    value=$(yq eval ".paths.session_file // \"\"" "$CONFIG_FILE")
-    [ -n "$value" ] && [ "$value" != "null" ] && export "SESSION_FILE=$(eval echo "$value")"
-
-    value=$(yq eval ".paths.analyze_file // \"\"" "$CONFIG_FILE")
-    [ -n "$value" ] && [ "$value" != "null" ] && export "ANALYZE_FILE=$(eval echo "$value")"
-
-    value=$(yq eval ".paths.query_dir // \"\"" "$CONFIG_FILE")
-    [ -n "$value" ] && [ "$value" != "null" ] && export "QUERY_DIR=$(eval echo "$value")"
 
     # Set TEST_ROOT for engine access
     export TEST_ROOT
@@ -284,7 +278,7 @@ run_ddl() {
         die "Database creation failed"
     fi
 
-    local ddl_file="${ddl:-ddl.sql}"
+    local ddl_file="${DDL:-ddl.sql}"
 
     # Convert relative path to absolute
     if [[ "$ddl_file" != /* ]]; then
@@ -332,7 +326,7 @@ run_session() {
 
 # Load data
 run_load() {
-    local load="$load_dir"
+    local load="$LOAD_DIR"
 
     # Convert relative path to absolute
     if [[ "$load" != /* ]]; then
@@ -440,7 +434,7 @@ run_query() {
             prefix=""
         fi
 
-        if [ "$query_mode" = "line" ]; then
+        if [ "$QUERY_MODE" = "line" ]; then
             # Line-based mode: each line is a separate query
             local query_counter=1
             while IFS= read -r line || [ -n "$line" ]; do
