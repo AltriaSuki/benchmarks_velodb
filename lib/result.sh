@@ -11,6 +11,7 @@ generate_result() {
     local result_json="$RESULT_DIR/result.json"
     local load_csv="$RESULT_DIR/load.csv"
     local query_csv="$RESULT_DIR/query.csv"
+    local check_rows_csv="$RESULT_DIR/check_rows.csv"
     local jmeter_config="$RESULT_DIR/jmeter_config.json"
     local statistics_json="$RESULT_DIR/html_report/statistics.json"
     local create_time
@@ -30,15 +31,70 @@ generate_result() {
     #     return 0
     # fi
     
-    # Prepare load times data as a JSON object {table_name: load_time}
-    local load_times_json
-    if [ -f "$load_csv" ]; then
-        # generate {table_name: load_time} JSON object
-        load_times_json=$(awk -F',' 'NR > 1 && $2 != "ERROR" {printf "\"%s\":%.3f,", $1, $2}' "$load_csv")
-        load_times_json="{${load_times_json%,}}"
-    else
-        load_times_json="{}"
+    # Read timing files
+    local ddl_time=0
+    if [ -f "$RESULT_DIR/ddl_time.txt" ]; then
+        ddl_time=$(cat "$RESULT_DIR/ddl_time.txt")
     fi
+    local check_rows_time=0
+    if [ -f "$RESULT_DIR/check_rows_time.txt" ]; then
+        check_rows_time=$(cat "$RESULT_DIR/check_rows_time.txt")
+    fi
+
+    local row_counts_json="{}"
+    if [ -f "$check_rows_csv" ]; then
+        row_counts_json=$(awk -F',' 'NR > 1 {printf "\"%s\":%s,", $1, $2}' "$check_rows_csv")
+        row_counts_json="{${row_counts_json%,}}"
+    fi
+
+    # Prepare load times data and extended load metadata using robust AWK parsing
+    local load_details_json="{}"
+    local load_times_json="{}"
+    local total_load_time_only=0
+
+    if [ -f "$load_csv" ]; then
+        # generate backward compatible structure {table_name: load_time}
+        load_times_json=$(awk -F',' 'NR > 1 && $3 != "ERROR" {printf "\"%s\":%.3f,", $1, $3}' "$load_csv")
+        load_times_json="{${load_times_json%,}}"
+
+        # calculate total load time using bc safe sums
+        total_load_time_only=$(awk -F',' 'NR > 1 {sum += $3} END {if(sum=="") sum=0; print sum}' "$load_csv")
+
+        # natively build load_details safely via awk to avoid complex jq csv parsing limits
+        if [ -f "$check_rows_csv" ]; then
+            load_details_json=$(awk -F',' '
+            NR==FNR { if(NR>1) rows[$1]=$2; next }
+            FNR==1 { printf "{"; next }
+            {
+                if (FNR > 2) printf ","
+                printf "\"%s\": {", $1
+                printf "\"method\":\"%s\",", $2
+                printf "\"load_time\":%.3f,", $3
+                printf "\"rows\":%d", (rows[$1] ? rows[$1] : 0)
+                if ($4 != "") printf ",\"load_bytes\":%s", $4
+                printf "}"
+            }
+            END { printf "}" }
+            ' "$check_rows_csv" "$load_csv")
+        else
+            load_details_json=$(awk -F',' '
+            NR==1 { printf "{"; next }
+            {
+                if (NR > 2) printf ","
+                printf "\"%s\": {", $1
+                printf "\"method\":\"%s\",", $2
+                printf "\"load_time\":%.3f,", $3
+                printf "\"rows\":0"
+                if ($4 != "") printf ",\"load_bytes\":%s", $4
+                printf "}"
+            }
+            END { printf "}" }
+            ' "$load_csv")
+        fi
+    fi
+
+    local total_load_time=$(echo "scale=3; $ddl_time + $total_load_time_only + $check_rows_time" | bc)
+
     # Process query times data as a JSON object {query_name: [times]}
     local query_times_json
     if [ -f "$query_csv" ]; then
@@ -93,6 +149,10 @@ generate_result() {
       --arg suite "${SUITE_NAME:-}" \
       --arg scale "${SCALE_FACTOR:-}" \
       --argjson load_times "$load_times_json" \
+      --argjson load_details "$load_details_json" \
+      --arg ddl_time "$ddl_time" \
+      --arg check_rows_time "$check_rows_time" \
+      --arg total_load_time "$total_load_time" \
       --argjson query_times "$query_times_json" \
       --argjson jmeter_config "$jmeter_config_content" \
       --argjson stats "$statistics_content" \
@@ -116,6 +176,10 @@ generate_result() {
       # 2. Construct Load Results
       .results.load = {
         load_times: $load_times,
+        ddl_time: ($ddl_time | tonumber),
+        load_details: $load_details,
+        check_rows_time: ($check_rows_time | tonumber),
+        total_load_time: ($total_load_time | tonumber),
         data_size_bytes: $data_size_bytes
       } |
       # 3. Construct Query Times Results

@@ -137,6 +137,30 @@ engine_run_sql() {
     fi
 }
 
+engine_get_table_rows() {
+    local table="$1"
+    local host="${fe_host:-127.0.0.1}"
+    local port="${fe_query_port:-9030}"
+    local sys_user="${user:-root}"
+
+    # Do not use `export MYSQL_PWD` to avoid environment pollution
+    MYSQL_PWD="${password:-}" mysql -h"${host}" -P"${port}" -u"${sys_user}" "${db}" \
+        -N -s -e "SELECT COUNT(*) FROM ${table};" 2>/dev/null || echo "0"
+
+    return 0
+}
+
+# Check S3 load status
+engine_check_load_status() {
+    local label="$1"
+    local host="${fe_host:-127.0.0.1}"
+    local port="${fe_query_port:-9030}"
+    local sys_user="${user:-root}"
+
+    MYSQL_PWD="${password:-}" mysql -h"${host}" -P"${port}" -u"${sys_user}" "${db}" \
+        -e "SHOW LOAD WHERE Label = '${label}'\\G" 2>/dev/null
+}
+
 # 3. Generate JDBC DataSource XML configuration for Doris
 engine_get_jdbc_datasource() {
     # Escape any special characters in the password
