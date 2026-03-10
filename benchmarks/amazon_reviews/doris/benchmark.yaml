@@ -28,12 +28,11 @@ parameters:
 # Test resource paths
 paths:
   ddl: "ddl/ddl.sql"
-  session: "session/session.sql"
-  analyze: "${ANALYZE_FILE:-analyze/analyze.sql}"
+  session_file: "${SESSION_FILE:-session/session.sql}"
+  analyze_file: "${ANALYZE_FILE:-analyze/analyze.sql}"
   load_dir: "load/"
+  query_dir: "${QUERY_DIR:-query/}" # Directory containing query SQL files
   query_mode: "line"
-  query_dirs:
-    - "query/"
 storage:
   endpoint: "${STORAGE_ENDPOINT:-https://s3.us-east-1.amazonaws.com}"
   region: "${STORAGE_REGION:-us-east-1}"

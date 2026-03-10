@@ -197,9 +197,13 @@ load_config() {
     done
 
     # Export paths (scalar values only)
-    for key in ddl session load_dir analyze query_mode; do
+    for key in ddl load_dir query_mode session_file analyze_file query_dir; do
         value=$(yq eval ".paths.$key // \"\"" "$CONFIG_FILE")
-        [ -n "$value" ] && [ "$value" != "null" ] && export "$key=$(eval echo "$value")"
+        if [ -n "$value" ] && [ "$value" != "null" ]; then
+            # Convert key to uppercase for env var name
+            env_var=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+            export "$env_var=$(eval echo "$value")"
+        fi
     done
 
     # Set TEST_ROOT for engine access
@@ -274,7 +278,7 @@ run_ddl() {
         die "Database creation failed"
     fi
 
-    local ddl_file="${ddl:-ddl.sql}"
+    local ddl_file="${DDL:-ddl.sql}"
 
     # Convert relative path to absolute
     if [[ "$ddl_file" != /* ]]; then
@@ -301,7 +305,7 @@ run_ddl() {
 }
 
 run_session() {
-    local session_file="${session:-session/session.sql}"
+    local session_file="${SESSION_FILE:-session/session.sql}"
 
     # Convert relative path to absolute
     if [[ "$session_file" != /* ]]; then
@@ -322,7 +326,7 @@ run_session() {
 
 # Load data
 run_load() {
-    local load="$load_dir"
+    local load="$LOAD_DIR"
 
     # Convert relative path to absolute
     if [[ "$load" != /* ]]; then
@@ -395,79 +399,70 @@ run_load() {
 
 # Run benchmark queries
 run_query() {
-    local query_dirs
-    while IFS= read -r line; do
-        query_dirs+=("$line")
-    done < <(yq eval '.paths.query_dirs[]?' "$CONFIG_FILE")
-
-    if [ ${#query_dirs[@]} -eq 0 ]; then
-        echo "No query directories specified, skipping query execution"
-        return 0
-    fi
+    local query_dir="${QUERY_DIR:-query/}"
 
     # Collect all queries first
     local -a all_query_names=()
     local -a all_query_sqls=()
-    for query_dir in "${query_dirs[@]}"; do
-        # Convert relative path to absolute
-        if [[ "$query_dir" != /* ]]; then
-            query_dir="$TEST_ROOT/$query_dir"
-        fi
 
-        if [ ! -d "$query_dir" ]; then
-            echo "Query directory not found: $query_dir, skipping"
+    # Convert relative path to absolute
+    if [[ "$query_dir" != /* ]]; then
+        query_dir="$TEST_ROOT/$query_dir"
+    fi
+
+    if [ ! -d "$query_dir" ]; then
+        echo "Query directory not found: $query_dir, skipping"
+        return 0
+    fi
+
+    echo "Processing queries from $(basename "$query_dir")..."
+    # Process all SQL files in directory (sorted numerically)
+    while IFS= read -r -d '' query_file; do
+        if [ ! -f "$query_file" ]; then
             continue
         fi
 
-        echo "Processing queries from $(basename "$query_dir")..."
-        # Process all SQL files in directory (sorted numerically)
-        while IFS= read -r -d '' query_file; do
-            if [ ! -f "$query_file" ]; then
-                continue
-            fi
+        local query_name prefix
+        query_name=$(basename "$query_file" .sql)
 
-            local query_name prefix
-            query_name=$(basename "$query_file" .sql)
+        # Add prefix based on directory name for organization
+        local dir_name
+        dir_name=$(basename "$query_dir")
+        if [ "$dir_name" != "query" ] && [ "$dir_name" != "." ]; then
+            prefix="${dir_name}_"
+        else
+            prefix=""
+        fi
 
-            # Add prefix based on directory name for organization
-            local dir_name
-            dir_name=$(basename "$query_dir")
-            if [ "$dir_name" != "query" ] && [ "$dir_name" != "." ]; then
-                prefix="${dir_name}_"
-            else
-                prefix=""
-            fi
+        if [ "$QUERY_MODE" = "line" ]; then
+            # Line-based mode: each line is a separate query
+            local query_counter=1
+            while IFS= read -r line || [ -n "$line" ]; do
+                # Skip empty lines and comments
+                if [[ -z "$line" || "$line" =~ ^[[:space:]]*# || "$line" =~ ^[[:space:]]*-- ]]; then
+                    continue
+                fi
 
-            if [ "$query_mode" = "line" ]; then
-                # Line-based mode: each line is a separate query
-                local query_counter=1
-                while IFS= read -r line || [ -n "$line" ]; do
-                    # Skip empty lines and comments
-                    if [[ -z "$line" || "$line" =~ ^[[:space:]]*# || "$line" =~ ^[[:space:]]*-- ]]; then
-                        continue
-                    fi
-                    
-                    local full_query_name="${prefix}q${query_counter}"
-                    # Add to queries array: query_name and sql_content separately
-                    all_query_names+=("$full_query_name")
-                    all_query_sqls+=("$(printf '%s' "$line" | envsubst)")
-                    
-                    ((query_counter++))
-                done < "$query_file"
-            else
-                # File-based mode: entire file is one query (default behavior)
-                local full_query_name="${prefix}${query_name}"
-                
-                # Read and escape SQL content
-                local sql_content
-                sql_content=$(envsubst < "$query_file")
-                
+                local full_query_name="${prefix}q${query_counter}"
                 # Add to queries array: query_name and sql_content separately
                 all_query_names+=("$full_query_name")
-                all_query_sqls+=("$sql_content")
-            fi
-        done < <(find "$query_dir" -maxdepth 1 -name "*.sql" -type f -print0 | sort -zV)
-    done
+                all_query_sqls+=("$(printf '%s' "$line" | envsubst)")
+
+                ((query_counter++))
+            done < "$query_file"
+        else
+            # File-based mode: entire file is one query (default behavior)
+            local full_query_name="${prefix}${query_name}"
+
+            # Read and escape SQL content
+            local sql_content
+            sql_content=$(envsubst < "$query_file")
+
+            # Add to queries array: query_name and sql_content separately
+            all_query_names+=("$full_query_name")
+            all_query_sqls+=("$sql_content")
+        fi
+    done < <(find "$query_dir" -maxdepth 1 -name "*.sql" -type f -print0 | sort -zV)
     
     
 
@@ -588,7 +583,7 @@ run_query() {
 
 run_analyze() {
     echo "Running analysis..."
-    local analyze_sql="${analyze:-analyze/analyze.sql}"
+    local analyze_sql="${ANALYZE_FILE:-analyze/analyze.sql}"
 
     if [ -z "$analyze_sql" ] || [ "$analyze_sql" = "null" ]; then
         echo "No analysis SQL provided, skipping"
