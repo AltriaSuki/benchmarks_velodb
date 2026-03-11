@@ -171,6 +171,7 @@ initialize_test() {
     
     # Create timestamped results directory
     TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
+    export TIMESTAMP
     RESULT_DIR="$SCRIPT_DIR/results/${benchmark_name}_${scale_factor}_${ENGINE_TYPE}_${TIMESTAMP}"
     mkdir -p "$RESULT_DIR"
     
@@ -375,68 +376,31 @@ run_load() {
         local start_time=$(date +%s%3N)
         local load_output=""
 
-        if [[ "$detected_method" == "stream_load" ]]; then
-            if load_output=$(bash "$load_file" 2>&1); then
-                echo "$load_output"
-            else
-                echo "$load_output" >&2
-                die "Failed to execute load script: $load_file"
-            fi
-        elif [[ "$detected_method" == "s3_load" ]]; then
-            # S3 Load is async, need to check status
-            local tmp_sql
-            create_temp_sql_file "load_${table_name}"
-            tmp_sql="$LAST_TEMP_FILE"
-            envsubst < "$load_file" > "$tmp_sql"
-
-            if ! engine_run_sql_file "$tmp_sql"; then
-                rm -f "$tmp_sql"
-                die "Failed to submit S3 load: $load_file"
-            fi
-            rm -f "$tmp_sql"
-
-            echo "    Waiting for S3 load to complete..."
-            # Poll load status every second
-            local max_wait=3600
-            local waited=0
-            while [ $waited -lt $max_wait ]; do
-                sleep 1
-                waited=$((waited + 1))
-
-                local status_output
-                status_output=$(engine_check_load_status "$table_name")
-
-                if echo "$status_output" | grep -q "Empty set"; then
-                    die "S3 load failed: Label not found"
-                elif echo "$status_output" | grep -q "FINISHED"; then
-                    echo "    S3 load completed successfully"
-                    break
-                elif echo "$status_output" | grep -q "CANCELLED"; then
-                    echo "$status_output"
-                    die "S3 load cancelled"
-                fi
-
-                # Print progress if available
-                if echo "$status_output" | grep -q "Progress:"; then
-                    echo "$status_output" | grep "Progress:" | head -1
-                fi
-            done
-
-            if [ $waited -ge $max_wait ]; then
-                die "S3 load timeout after ${max_wait}s"
+        if type -t engine_load_data > /dev/null; then
+            if ! engine_load_data "$detected_method" "$load_file" "$table_name"; then
+                die "Engine failed to load data for $table_name using $detected_method"
             fi
         else
-            # insert_into
-            local tmp_sql
-            create_temp_sql_file "load_${table_name}"
-            tmp_sql="$LAST_TEMP_FILE"
-            envsubst < "$load_file" > "$tmp_sql"
+            # Default fallback for engines that don't implement engine_load_data
+            if [[ "$detected_method" == "stream_load" ]]; then
+                if load_output=$(bash "$load_file" 2>&1); then
+                    echo "$load_output"
+                else
+                    echo "$load_output" >&2
+                    die "Failed to execute load script: $load_file"
+                fi
+            else
+                local tmp_sql
+                create_temp_sql_file "load_${table_name}"
+                tmp_sql="$LAST_TEMP_FILE"
+                envsubst < "$load_file" > "$tmp_sql"
 
-            if ! engine_run_sql_file "$tmp_sql"; then
+                if ! engine_run_sql_file "$tmp_sql"; then
+                    rm -f "$tmp_sql"
+                    die "Failed to execute load SQL file: $load_file"
+                fi
                 rm -f "$tmp_sql"
-                die "Failed to execute load SQL file: $load_file"
             fi
-            rm -f "$tmp_sql"
         fi
 
         local end_time=$(date +%s%3N)
@@ -805,16 +769,20 @@ main() {
     
     # Run benchmark workflow
     echo "Starting benchmark: $ENGINE_TYPE"
-    # TODO(zgx): add prepare set session ..
+    # 1. Run DDL first so the database and tables exist
+    if [[ "$load" == "true" ]]; then
+        run_ddl
+    fi
+
+    # 2. Run Session setup next so variables are set for Load and Query phases
     if [[ "$session" != "true" ]]; then
         echo "Session setup disabled, skipping"
     else
         run_session
     fi
-    if [[ "$load" != "true" ]]; then
-        echo "Data loading disabled, skipping"
-    else
-        run_ddl
+
+    # 3. Finally run Load and other phases
+    if [[ "$load" == "true" ]]; then
         run_load
         run_check_rows
     fi
