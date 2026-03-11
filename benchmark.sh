@@ -326,7 +326,7 @@ run_session() {
 
 # Load data
 run_load() {
-    local load_dir="${LOAD_DIR:-load/}"
+    local load_dir="$LOAD_DIR"
 
     if [ -z "$load_dir" ]; then
         echo "No load directory configured, skipping data loading"
@@ -359,7 +359,7 @@ run_load() {
 
     # Initialize load results CSV
     local load_csv="$RESULT_DIR/load.csv"
-    echo "table_name,method,load_time_seconds,load_bytes" > "$load_csv"
+    echo "table_name,method,load_time_seconds" > "$load_csv"
 
     local loaded_count=0
     for load_file in "$load_dir"/*.sql "$load_dir"/*.sh; do
@@ -442,12 +442,7 @@ run_load() {
         local end_time=$(date +%s%3N)
         local duration=$(echo "scale=3; ($end_time - $start_time) / 1000" | bc)
 
-        local load_bytes=""
-        if [[ "$detected_method" == "stream_load" && -n "$load_output" ]]; then
-            load_bytes=$(echo "$load_output" | grep -i '"LoadBytes"' | grep -oE '[0-9]+' | head -n 1)
-        fi
-
-        echo "$table_name,$detected_method,$duration,$load_bytes" >> "$load_csv"
+        echo "$table_name,$detected_method,$duration" >> "$load_csv"
         echo "    ${duration}s"
         loaded_count=$((loaded_count + 1))
     done

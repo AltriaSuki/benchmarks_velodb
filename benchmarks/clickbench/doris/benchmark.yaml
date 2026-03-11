@@ -36,3 +36,6 @@ storage:
   endpoint: "${STORAGE_ENDPOINT:-https://s3.us-east-1.amazonaws.com}"
   region: "${STORAGE_REGION:-us-east-1}"
   bucket: "${STORAGE_BUCKET:-bench-dataset}"
+
+tables:
+  hits: 99997497

@@ -71,7 +71,6 @@ generate_result() {
                 printf "\"method\":\"%s\",", $2
                 printf "\"load_time\":%.3f,", $3
                 printf "\"rows\":%d", (rows[$1] ? rows[$1] : 0)
-                if ($4 != "") printf ",\"load_bytes\":%s", $4
                 printf "}"
             }
             END { printf "}" }
@@ -85,7 +84,6 @@ generate_result() {
                 printf "\"method\":\"%s\",", $2
                 printf "\"load_time\":%.3f,", $3
                 printf "\"rows\":0"
-                if ($4 != "") printf ",\"load_bytes\":%s", $4
                 printf "}"
             }
             END { printf "}" }
