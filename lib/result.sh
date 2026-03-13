@@ -34,7 +34,8 @@ generate_result() {
     local load_times_json
     if [ -f "$load_csv" ]; then
         # generate {table_name: load_time} JSON object
-        load_times_json=$(awk -F',' 'NR > 1 && $2 != "ERROR" {printf "\"%s\":%.3f,", $1, $2}' "$load_csv")
+        # The format is table_name,method,load_time_seconds or table_name,load_time_seconds
+        load_times_json=$(awk -F',' 'NR > 1 && $NF != "ERROR" {printf "\"%s\":%.3f,", $1, $NF}' "$load_csv")
         load_times_json="{${load_times_json%,}}"
     else
         load_times_json="{}"
