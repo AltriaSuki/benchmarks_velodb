@@ -24,22 +24,22 @@ parameters:
 vectordbbench:
   case:
     type: "${CASE_TYPE:-Performance768D1M}" # Case type from VectorDBBench
-    task_label: "${TASK_LABEL:-doris-vector-test}"
-    db_label: "${DB_LABEL:-standard}"
+    task_label: "${TASK_LABEL:-doris-1M-upload-and-search}"
+    db_label: "${DB_LABEL:-16c64g}"
   
   test:
-    concurrency: "${CONCURRENCY:-1,10,20}" # Gradient concurrency
-    num_per_batch: 100000
-    stream_load_rows_per_batch: 100000
+    concurrency: "${CONCURRENCY:-1,60,90}" # Gradient concurrency
+    num_per_batch: "${NUM_PER_BATCH:-500000}"
+    stream_load_rows_per_batch: "${STREAM_LOAD_ROWS_PER_BATCH:-500000}"
   
   index:
     properties: "max_degree=128,ef_construction=256"
     session_vars: "hnsw_ef_search=100"
 
   storage:
-    dataset_source: "AliyunOSS" # Use AliyunOSS for faster download in CN
-    dataset_local_dir: "${DATASET_LOCAL_DIR:-/tmp/vectordbbench_data}"
-    results_local_dir: "${RESULTS_LOCAL_DIR:-results/vector}"
+    dataset_source: "${DATASET_SOURCE:-AliyunOSS}" # Use AliyunOSS for faster download in CN
+    dataset_local_dir: "${DATASET_LOCAL_DIR:-/mnt/disk1/wangchengfeng/vectordbbench_data}"
+    results_local_dir: "${RESULTS_LOCAL_DIR:-/mnt/disk1/wangchengfeng/vectordbbench_results}"
 
 # Paths for framework compatibility (if needed)
 paths:
