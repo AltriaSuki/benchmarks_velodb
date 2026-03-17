@@ -12,7 +12,7 @@ execute_vectordbbench_task() {
 
     if ! command -v "$vdb_cmd" > /dev/null 2>&1; then
         echo "  VectorDBBench not found. Attempting to install..."
-        if ! pip3 install --user -U vectordb-bench doris-vector-search mysql-connector-python; then
+        if ! pip3 install --user -U vectordb-bench==1.0.16 doris-vector-search mysql-connector-python; then
             echo "ERROR: Failed to install VectorDBBench dependencies via pip3."
             return 1
         fi
