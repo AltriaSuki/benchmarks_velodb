@@ -41,6 +41,10 @@ execute_vectordbbench_task() {
     local dataset_dir=$(eval echo $(yq eval '.vectordbbench.storage.dataset_local_dir' "$CONFIG_FILE"))
     local result_dir=$(eval echo $(yq eval '.vectordbbench.storage.results_local_dir' "$CONFIG_FILE"))
 
+    # Normalize relative paths to absolute (anchored to project root $SCRIPT_DIR)
+    [[ "$dataset_dir" != /* ]] && dataset_dir="$SCRIPT_DIR/$dataset_dir"
+    [[ "$result_dir" != /* ]] && result_dir="$SCRIPT_DIR/$result_dir"
+
     # 3. Setup Environment Variables for VectorDBBench
     export DATASET_SOURCE="$dataset_source"
     export DATASET_LOCAL_DIR="$dataset_dir"

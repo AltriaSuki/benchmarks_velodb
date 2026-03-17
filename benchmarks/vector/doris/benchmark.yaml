@@ -38,8 +38,8 @@ vectordbbench:
 
   storage:
     dataset_source: "${DATASET_SOURCE:-AliyunOSS}" # Use AliyunOSS for faster download in CN
-    dataset_local_dir: "${DATASET_LOCAL_DIR:-/mnt/disk1/wangchengfeng/vectordbbench_data}"
-    results_local_dir: "${RESULTS_LOCAL_DIR:-/mnt/disk1/wangchengfeng/vectordbbench_results}"
+    dataset_local_dir: "${DATASET_LOCAL_DIR:-data/vectordbbench_data}"
+    results_local_dir: "${RESULTS_LOCAL_DIR:-results/vector}"
 
 # Paths for framework compatibility (if needed)
 paths:
