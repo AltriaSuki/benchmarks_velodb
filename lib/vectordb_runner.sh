@@ -6,13 +6,16 @@
 execute_vectordbbench_task() {
     echo "==== Starting VectorDBBench Phase ===="
     
+    # Discover project root (one level up from lib/)
+    local base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    
     # 1. Environment and Dependency Check
     export PATH="$PATH:$HOME/.local/bin"
     local vdb_cmd="vectordbbench"
 
     if ! command -v "$vdb_cmd" > /dev/null 2>&1; then
         echo "  VectorDBBench not found. Attempting to install..."
-        if ! pip3 install --user -U vectordb-bench doris-vector-search mysql-connector-python==2.2.9; then
+        if ! pip3 install --user -U vectordb-bench doris-vector-search mysql-connector==2.2.9; then
             echo "ERROR: Failed to install VectorDBBench dependencies via pip3."
             return 1
         fi
@@ -41,9 +44,9 @@ execute_vectordbbench_task() {
     local dataset_dir=$(eval echo $(yq eval '.vectordbbench.storage.dataset_local_dir' "$CONFIG_FILE"))
     local result_dir=$(eval echo $(yq eval '.vectordbbench.storage.results_local_dir' "$CONFIG_FILE"))
 
-    # Normalize relative paths to absolute (anchored to project root $SCRIPT_DIR)
-    [[ "$dataset_dir" != /* ]] && dataset_dir="$SCRIPT_DIR/$dataset_dir"
-    [[ "$result_dir" != /* ]] && result_dir="$SCRIPT_DIR/$result_dir"
+    # Normalize relative paths to absolute (anchored to base_dir)
+    [[ "$dataset_dir" != /* ]] && dataset_dir="$base_dir/$dataset_dir"
+    [[ "$result_dir" != /* ]] && result_dir="$base_dir/$result_dir"
 
     # 3. Setup Environment Variables for VectorDBBench
     export DATASET_SOURCE="$dataset_source"
