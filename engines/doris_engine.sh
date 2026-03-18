@@ -397,10 +397,3 @@ engine_load_data() {
     fi
 }
 
-engine_check_load_status() {
-    local label="$1"
-    export MYSQL_PWD="${password:-}"
-    local args=(-h"$fe_host" -P"$fe_query_port" -u"$user")
-    [ -n "${db:-}" ] && args+=(-D"$db")
-    mysql "${args[@]}" -e "SHOW LOAD WHERE Label = '$label' \G" 2>/dev/null || true
-}
