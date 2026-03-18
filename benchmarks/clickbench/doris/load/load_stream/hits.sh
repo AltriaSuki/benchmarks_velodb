@@ -17,7 +17,10 @@ max_filter_ratio="${DORIS_MAX_FILTER_RATIO:-0.1}"
 url="http://${host}:${http_port}/api/${db}/${table}/_stream_load"
 label="bench_${db}_${table}_${RANDOM}_$$"
 
-echo "[INFO] Stream load ${db}.${table} from: ${BENCH_DATA_DIR:-/mnt/disk1/wangchengfeng/benchmarks_velodb/benchmarks/clickbench/postgresql/load/hits.tsv}"
+# Data source file path (supports environment variable override)
+DATA_FILE="${BENCH_DATA_DIR:-benchmarks/clickbench/doris/load/hits.tsv}"
+
+echo "[INFO] Stream load ${db}.${table} from: ${DATA_FILE}"
 
 sep_value=$'\t'
 
@@ -30,8 +33,6 @@ headers=(
   -H "timeout:${timeout_s}"
   -H "max_filter_ratio:${max_filter_ratio}"
 )
-
-DATA_FILE="${BENCH_DATA_DIR:-/mnt/disk1/wangchengfeng/benchmarks_velodb/benchmarks/clickbench/postgresql/load/hits.tsv}"
 
 if [[ ! -f "$DATA_FILE" ]]; then
   echo "[ERROR] Source file not found: $DATA_FILE" >&2
