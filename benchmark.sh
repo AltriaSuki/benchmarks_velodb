@@ -704,7 +704,6 @@ main() {
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
     profile="${profile:-${PROFILE:-false}}"
     plan="${plan:-${PLAN:-false}}"
-    vectordbbench="${vectordbbench:-${VECTORDBBENCH:-false}}"
 
     if [[ "${drop_database,,}" != "true" ]]; then
         drop_database="false"
@@ -717,9 +716,6 @@ main() {
     fi
     if [[ "${plan,,}" != "true" ]]; then
         plan="false"
-    fi
-    if [[ "${vectordbbench,,}" != "true" ]]; then
-        vectordbbench="false"
     fi
     
     # Load and initialize engine
