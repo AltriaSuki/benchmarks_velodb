@@ -129,3 +129,34 @@ init_jmeter_tools() {
     fi
     return 0
 }
+
+init_sysbench() {
+    _init_tools_dir
+
+    local sysbench_dir="$TOOLS_DIR/sysbench_dir"
+    local sysbench_binary="$sysbench_dir/bin/sysbench"
+    local sysbench_archive="$TOOLS_DIR/sysbench_dir.tar.gz"
+
+    if [ ! -f "$sysbench_binary" ] && [ -f "$sysbench_archive" ]; then
+        echo "Extracting sysbench..."
+        mkdir -p "$TOOLS_DIR"
+        tar -xzf "$sysbench_archive" -C "$TOOLS_DIR"
+    fi
+
+    if [ -f "$sysbench_binary" ]; then
+        export LD_LIBRARY_PATH="$sysbench_dir/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+        export PATH="$sysbench_dir/bin:$PATH"
+        export LUA_PATH="$sysbench_dir/share/sysbench/?.lua;;"
+        export SYSBENCH_SHARE_DIR="$sysbench_dir/share/sysbench"
+        echo "Using local sysbench: $sysbench_binary"
+        return 0
+    fi
+
+    if command -v sysbench >/dev/null 2>&1; then
+        echo "Using system sysbench"
+        return 0
+    fi
+
+    echo "ERROR: sysbench not found in tools directory or system PATH" >&2
+    return 1
+}
