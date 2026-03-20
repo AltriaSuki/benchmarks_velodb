@@ -195,7 +195,7 @@ engine_get_jdbc_sampler_name() {
 # Optional: enable query profile collection
 engine_enable_profile() {
     export MYSQL_PWD="${password:-}"
-    mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -e "set global enable_profile=true;" >/dev/null 2>&1
+    mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -e "set global enable_profile=true;set global profile_level=2;" >/dev/null 2>&1
 }
 
 # Optional: disable query profile collection
@@ -222,7 +222,7 @@ engine_fetch_profile() {
     if [ -z "$query_id" ]; then
         return 1
     fi
-    curl -s -u "${user}:${password:-}" "http://${fe_host}:${fe_http_port}/rest/v2/manager/query/profile/text/${query_id}" 2>/dev/null
+    echo -e "$(curl -s -u "${user}:${password:-}" "http://${fe_host}:${fe_http_port}/rest/v2/manager/query/profile/text/${query_id}" 2>/dev/null)"
 }
 
 # Optional: fetch plan text for a query
