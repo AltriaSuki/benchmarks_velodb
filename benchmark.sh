@@ -25,12 +25,6 @@ register_temp_file() {
     TEMP_FILES+=("$1")
 }
 
-cleanup_temp_files() {
-    local tmp
-    for tmp in "${TEMP_FILES[@]:-}"; do
-        [ -n "$tmp" ] && rm -f -- "$tmp"
-    done
-}
 
 create_temp_sql_file() {
     local prefix="$1"
@@ -42,7 +36,6 @@ create_temp_sql_file() {
     LAST_TEMP_FILE="$tmp_file"
 }
 
-trap cleanup_temp_files EXIT
 
 # Load modular components
 source "$SCRIPT_DIR/lib/tools_utils.sh"
@@ -757,6 +750,7 @@ main() {
     analyze="${analyze:-false}"
     query="${query:-false}"
     query_times="${query_times:-1}"
+    vectordbbench="${vectordbbench:-false}"
     db="${db:-}"
     drop_database="${drop_database:-${DROP_DATABASE:-true}}"
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
