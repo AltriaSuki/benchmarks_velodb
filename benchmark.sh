@@ -765,6 +765,7 @@ main() {
     analyze="${analyze:-false}"
     query="${query:-false}"
     query_times="${query_times:-1}"
+    vectordbbench="${vectordbbench:-false}"
     db="${db:-}"
     drop_database="${drop_database:-${DROP_DATABASE:-true}}"
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
