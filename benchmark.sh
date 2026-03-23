@@ -17,21 +17,7 @@ TEST_ROOT=""
 ENGINE_TYPE=""
 RESULT_DIR=""
 TIMESTAMP=""
-TEMP_FILES=()
 LAST_TEMP_FILE=""
-
-# Track and clean temporary files created by this script.
-register_temp_file() {
-    TEMP_FILES+=("$1")
-}
-
-cleanup_temp_files() {
-    local tmp
-    for tmp in "${TEMP_FILES[@]:-}"; do
-        [ -n "$tmp" ] && rm -f -- "$tmp"
-    done
-    return 0
-}
 
 create_temp_sql_file() {
     local prefix="$1"
@@ -39,11 +25,8 @@ create_temp_sql_file() {
     local tmp_file
     safe_prefix="${prefix//[^a-zA-Z0-9_.-]/_}"
     tmp_file="$(mktemp "${TMPDIR:-/tmp}/bench_${safe_prefix}.XXXXXX.sql")" || die "Failed to create temporary file"
-    register_temp_file "$tmp_file"
     LAST_TEMP_FILE="$tmp_file"
 }
-
-trap cleanup_temp_files EXIT
 
 # Load modular components
 source "$SCRIPT_DIR/lib/tools_utils.sh"
