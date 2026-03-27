@@ -15,6 +15,5 @@ WITH S3
 PROPERTIES
 (
     "timeout" = "36000",
-    "load_parallelism" = "8",
     "max_filter_ratio" = "0.1"
 );
