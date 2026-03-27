@@ -4,7 +4,8 @@ LOAD LABEL region_${TIMESTAMP}
     INTO TABLE region
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
-    (r_regionkey, r_name, r_comment)
+    (r_regionkey, r_name, r_comment, r_dummy)
+    PROPERTIES('skip_lines' = '0')
 )
 WITH S3
 (

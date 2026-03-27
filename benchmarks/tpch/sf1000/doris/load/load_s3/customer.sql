@@ -4,7 +4,8 @@ LOAD LABEL customer_${TIMESTAMP}
     INTO TABLE customer
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
-    (c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment)
+    (c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment, c_dummy)
+    PROPERTIES('skip_lines' = '0')
 )
 WITH S3
 (

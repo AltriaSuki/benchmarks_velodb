@@ -4,7 +4,8 @@ LOAD LABEL part_${TIMESTAMP}
     INTO TABLE part
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
-    (p_partkey, p_name, p_mfgr, p_brand, p_type, p_size, p_container, p_retailprice, p_comment)
+    (p_partkey, p_name, p_mfgr, p_brand, p_type, p_size, p_container, p_retailprice, p_comment, p_dummy)
+    PROPERTIES('skip_lines' = '0')
 )
 WITH S3
 (
