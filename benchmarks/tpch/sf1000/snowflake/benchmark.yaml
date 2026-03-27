@@ -5,7 +5,7 @@ engine:
   type: "snowflake" # Engine type
   connection:
     account: "${SNOWFLAKE_ACCOUNT:-}" # Snowflake account identifier
-    user: "${USER:-}" # Snowflake username
+    user: "${DB_USER:-}" # Snowflake username
     role: "${ROLE:-ACCOUNTADMIN}" # Snowflake role
     password: "${PASSWORD:-}" # Snowflake password
     warehouse: "${WAREHOUSE:-COMPUTE_WH}" # Snowflake warehouse

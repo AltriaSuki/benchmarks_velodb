@@ -1,0 +1,13 @@
+SELECT sleep(60);
+DROP STATS customer;
+DROP STATS dates;
+DROP STATS lineorder;
+DROP STATS part;
+DROP STATS supplier;
+DROP STATS lineorder_flat;
+ANALYZE TABLE customer WITH SYNC;
+ANALYZE TABLE dates WITH SYNC;
+ANALYZE TABLE lineorder WITH SYNC;
+ANALYZE TABLE part WITH SYNC;
+ANALYZE TABLE supplier WITH SYNC;
+ANALYZE TABLE lineorder_flat WITH SYNC;

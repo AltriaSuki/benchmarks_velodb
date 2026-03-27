@@ -319,14 +319,30 @@ run_session() {
     fi
 }
 
-# Load data
-run_load() {
-    local load_dir="$LOAD_DIR"
+detect_load_method() {
+    local load_dir="$1"
+    local dirname
+    dirname=$(basename "$load_dir")
 
-    if [ -z "$load_dir" ]; then
-        echo "No load directory configured, skipping data loading"
-        return 0
+    if [[ "$dirname" == *stream* ]]; then
+        echo "stream_load"
+    elif [[ "$dirname" == *s3* ]]; then
+        echo "s3_load"
+    elif [[ "$dirname" == *insert* ]]; then
+        echo "insert_into"
+    else
+        echo "insert_into"
     fi
+}
+
+run_load_directory() {
+    local load_dir="$1"
+    local detected_method="$2"
+    local load_csv="$3"
+    local loaded_count=0
+    local load_output=""
+
+    LAST_LOAD_COUNT=0
 
     # Convert relative path to absolute
     if [[ "$load_dir" != /* ]]; then
@@ -334,41 +350,25 @@ run_load() {
     fi
 
     if [ ! -d "$load_dir" ]; then
-        echo "Load directory not found, skipping data loading"
+        echo "Load directory not found, skipping: $load_dir"
         return 0
     fi
 
-    # Detect method from directory name
-    local dirname=$(basename "$load_dir")
-    local detected_method="insert_into"  # default
+    echo "Loading data from $(basename "$load_dir") (method: $detected_method)..."
 
-    if [[ "$dirname" == *stream* ]]; then
-        detected_method="stream_load"
-    elif [[ "$dirname" == *s3* ]]; then
-        detected_method="s3_load"
-    elif [[ "$dirname" == *insert* ]]; then
-        detected_method="insert_into"
-    fi
-
-    echo "Loading data from $dirname (method: $detected_method)..."
-
-    # Initialize load results CSV
-    local load_csv="$RESULT_DIR/load.csv"
-    echo "table_name,method,load_time_seconds" > "$load_csv"
-
-    local loaded_count=0
     for load_file in "$load_dir"/*.sql "$load_dir"/*.sh; do
         if [ ! -f "$load_file" ]; then
             continue
         fi
 
-        local filename=$(basename "$load_file")
+        local filename
+        filename=$(basename "$load_file")
         local table_name="${filename%.*}"
 
         echo "  Loading $table_name..."
 
-        local start_time=$(date +%s%3N)
-        local load_output=""
+        local start_time
+        start_time=$(date +%s%3N)
 
         if type -t engine_load_data > /dev/null; then
             if ! engine_load_data "$detected_method" "$load_file" "$table_name"; then
@@ -397,13 +397,72 @@ run_load() {
             fi
         fi
 
-        local end_time=$(date +%s%3N)
-        local duration=$(echo "scale=3; ($end_time - $start_time) / 1000" | bc)
+        local end_time
+        end_time=$(date +%s%3N)
+        local duration
+        duration=$(echo "scale=3; ($end_time - $start_time) / 1000" | bc)
 
         echo "$table_name,$detected_method,$duration" >> "$load_csv"
         echo "    ${duration}s"
         loaded_count=$((loaded_count + 1))
     done
+
+    LAST_LOAD_COUNT=$loaded_count
+}
+
+# Load data
+run_load() {
+    local load_dir="${LOAD_DIR:-}"
+    local load_steps_count=0
+
+    load_steps_count=$(yq eval '.paths.load_steps // [] | length' "$CONFIG_FILE")
+
+    if [ "$load_steps_count" -eq 0 ] && [ -z "$load_dir" ]; then
+        echo "No load directory configured, skipping data loading"
+        return 0
+    fi
+
+    # Initialize load results CSV
+    local load_csv="$RESULT_DIR/load.csv"
+    echo "table_name,method,load_time_seconds" > "$load_csv"
+
+    local loaded_count=0
+
+    if [ "$load_steps_count" -gt 0 ]; then
+        local i
+        for ((i = 0; i < load_steps_count; i++)); do
+            local step_dir
+            local step_method
+
+            step_dir=$(yq eval ".paths.load_steps[$i].dir // \"\"" "$CONFIG_FILE")
+            step_method=$(yq eval ".paths.load_steps[$i].method // \"\"" "$CONFIG_FILE")
+
+            step_dir=$(eval echo "$step_dir")
+            step_method=$(eval echo "$step_method")
+
+            if [ -z "$step_dir" ]; then
+                echo "Skipping load step $i: missing dir"
+                continue
+            fi
+
+            if [ -z "$step_method" ]; then
+                step_method=$(detect_load_method "$step_dir")
+            fi
+
+            run_load_directory "$step_dir" "$step_method" "$load_csv"
+            loaded_count=$((loaded_count + LAST_LOAD_COUNT))
+        done
+    else
+        if [ -z "$load_dir" ]; then
+            echo "No load directory configured, skipping data loading"
+            return 0
+        fi
+
+        local detected_method
+        detected_method=$(detect_load_method "$load_dir")
+        run_load_directory "$load_dir" "$detected_method" "$load_csv"
+        loaded_count=$LAST_LOAD_COUNT
+    fi
 
     echo "Data loading completed: $loaded_count tables"
 }

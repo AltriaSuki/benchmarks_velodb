@@ -6,7 +6,7 @@ engine:
   connection:
     host: "${HOST:-127.0.0.1}" # trino coordinator host
     port: "${PORT:-8080}" # trino port
-    user: "${USER:-trino}" # trino username
+    user: "${DB_USER:-trino}" # trino username
     password: "${PASSWORD:-}" # trino password (optional)
     catalog: "${CATALOG:-nessie}" # trino catalog name
     schema: "${SCHEMA:-ssb_sf1000_parquet}" # trino schema name
