@@ -722,9 +722,21 @@ run_analyze() {
     tmp_sql="$LAST_TEMP_FILE"
     envsubst < "$analyze_sql" > "$tmp_sql"
 
+    local start_time
+    start_time=$(date +%s%3N)
+
     if engine_run_sql_file "$tmp_sql"; then
+        local end_time
+        end_time=$(date +%s%3N)
+        local duration
+        duration=$(echo "scale=3; ($end_time - $start_time) / 1000" | bc)
+        
+        # Save to analyze.csv
+        echo "step,duration_seconds" > "$RESULT_DIR/analyze.csv"
+        echo "analyze,$duration" >> "$RESULT_DIR/analyze.csv"
+        
         rm -f "$tmp_sql"
-        echo "Analysis completed"
+        echo "Analysis completed in ${duration}s"
     else
         rm -f "$tmp_sql"
         die "Analysis failed"

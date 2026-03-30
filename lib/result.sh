@@ -31,6 +31,15 @@ generate_result() {
     #     return 0
     # fi
     
+    local analyze_csv="$RESULT_DIR/analyze.csv"
+    local analyze_times_json
+    if [ -f "$analyze_csv" ]; then
+        analyze_times_json=$(awk -F',' 'NR > 1 {printf "\"%s\":%.3f,", $1, $NF}' "$analyze_csv")
+        analyze_times_json="{${analyze_times_json%,}}"
+    else
+        analyze_times_json="{}"
+    fi
+
     # Prepare load times data as a JSON object {table_name: load_time}
     local load_times_json
     if [ -f "$load_csv" ]; then
@@ -95,6 +104,7 @@ generate_result() {
       --arg suite "${SUITE_NAME:-}" \
       --arg scale "${SCALE_FACTOR:-}" \
       --argjson load_times "$load_times_json" \
+      --argjson analyze_times "$analyze_times_json" \
       --argjson query_times "$query_times_json" \
       --argjson jmeter_config "$jmeter_config_content" \
       --argjson stats "$statistics_content" \
@@ -114,18 +124,20 @@ generate_result() {
           tags: ["benchmark", $system]
         }
       } |
-
       # 2. Construct Load Results
       .results.load = {
         load_times: $load_times,
         data_size_bytes: $data_size_bytes
       } |
-      # 3. Construct Query Times Results
+      # 3. Construct Analyze Results
+      .results.analyze = {
+        analyze_times: $analyze_times
+      } |
+      # 4. Construct Query Times Results
       .results.query = {
         query_times: $query_times
       } |
-
-      # 4. Construct JMeter Results
+      # 5. Construct JMeter Results
       .results.jmeter = {
         test_results: [
           {
@@ -206,6 +218,9 @@ generate_basic_report() {
     "load": {
       "load_times": {},
       "data_size_bytes": $data_size_bytes
+    },
+    "analyze": {
+      "analyze_times": {}
     },
     "query": {
       "query_times": {}
