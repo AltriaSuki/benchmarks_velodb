@@ -811,7 +811,7 @@ main() {
     query_times="${query_times:-1}"
     vectordbbench="${vectordbbench:-false}"
     db="${db:-}"
-    drop_database="${drop_database:-${DROP_DATABASE:-true}}"
+    drop_database="${drop_database:-${DROP_DATABASE:-false}}"
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
     profile="${profile:-${PROFILE:-false}}"
     plan="${plan:-${PLAN:-false}}"
