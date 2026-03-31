@@ -13,7 +13,57 @@ BENCHMARKS_DIR="$PROJECT_ROOT/benchmarks"
 VERSIONS_RESULTS_DIR="$PROJECT_ROOT/versions/results"
 OUTPUT_FILE="$PROJECT_ROOT/index.html"
 
+# Default selected filters in the generated HTML.
+# Empty benchmark arrays fall back to the first available benchmark on the page.
+# Empty scale arrays fall back to all available scales on the page.
+DEFAULT_MAIN_BENCHMARKS=(ssb ssb_flat tpcds tpch)
+DEFAULT_VERSIONS_BENCHMARKS=(ssb ssb_flat tpcds tpch)
+DEFAULT_MAIN_SCALES=(sf1000)
+DEFAULT_VERSIONS_SCALES=(sf1000)
+
 # --- Functions ---
+
+js_array_from_values() {
+    local first=true
+    local value
+
+    printf '['
+    for value in "$@"; do
+        if [ "$first" = true ]; then
+            first=false
+        else
+            printf ', '
+        fi
+        jq -Rn --arg value "$value" '$value'
+    done
+    printf ']'
+}
+
+emit_default_selection_config() {
+    local main_benchmarks_js
+    local versions_benchmarks_js
+    local main_scales_js
+    local versions_scales_js
+
+    main_benchmarks_js="$(js_array_from_values "${DEFAULT_MAIN_BENCHMARKS[@]}")"
+    versions_benchmarks_js="$(js_array_from_values "${DEFAULT_VERSIONS_BENCHMARKS[@]}")"
+    main_scales_js="$(js_array_from_values "${DEFAULT_MAIN_SCALES[@]}")"
+    versions_scales_js="$(js_array_from_values "${DEFAULT_VERSIONS_SCALES[@]}")"
+
+    cat <<EOF
+// Configure default selected filters here.
+const DEFAULT_SELECTED_BENCHMARKS = {
+    main: $main_benchmarks_js,
+    versions: $versions_benchmarks_js,
+};
+
+const DEFAULT_SELECTED_SCALES = {
+    main: $main_scales_js,
+    versions: $versions_scales_js,
+};
+
+EOF
+}
 
 parse_result_path() {
     local relative_path="$1"
@@ -314,10 +364,20 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
             background: var(--summary-every-other-row-color);
         }
 
+        #summary tr.summary-group-row:nth-child(odd) {
+            background: transparent;
+        }
+
         .summary-name {
             white-space: nowrap;
             text-align: right;
             padding-right: 1rem;
+        }
+
+        .summary-group-title {
+            text-align: left;
+            font-weight: bold;
+            padding: 1.25rem 0 0.5rem 0;
         }
 
         .summary-bar-cell {
@@ -500,6 +560,7 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
     <tr>
         <th>Benchmark: </th>
         <td id="selectors_benchmark">
+            <a id="select-all-benchmarks" class="selector selector-active">All</a>
         </td>
     </tr>
     <tr>
@@ -554,7 +615,11 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
     </tr>
 </table>
 
-<table class="stick-left comparison">
+<div id="summary-title" class="stick-left comparison">
+    <h2>Summary Comparison</h2>
+</div>
+
+<table id="summary-comparison" class="stick-left comparison">
     <thead>
         <tr>
             <th class="summary-name">
@@ -572,7 +637,7 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
 
 <div id="nothing-selected" class="stick-left">Nothing selected</div>
 
-<div class="stick-left comparison">
+<div id="details-title" class="stick-left comparison">
     <h2>Detailed Comparison</h2>
 </div>
 
@@ -591,6 +656,7 @@ HTMLHEAD
 # Generate and embed the data
 echo "Collecting benchmark data..."
 generate_data_js >> "$OUTPUT_FILE"
+emit_default_selection_config >> "$OUTPUT_FILE"
 
 # Add the JavaScript logic
 cat >> "$OUTPUT_FILE" << 'HTMLJS'
@@ -606,7 +672,7 @@ const combined_hot_share = 0.6;
 
 // State management
 let selectors = {
-    "benchmark": null,  // Single select - stores the selected benchmark name
+    "benchmark": {},
     "scale": {},
     "system": {},
     "machine": {},
@@ -658,8 +724,10 @@ function updateUrlParams() {
     }
     
     // Only add non-default values to URL
-    if (selectors.benchmark) {
-        params.set('benchmark', selectors.benchmark);
+    const selectedBenchmarks = getSelectedValues(selectors.benchmark);
+    const allBenchmarks = Object.keys(selectors.benchmark);
+    if (selectedBenchmarks.length !== allBenchmarks.length && selectedBenchmarks.length > 0) {
+        params.set('benchmark', selectedBenchmarks.join(','));
     }
     
     const selectedScales = Object.keys(selectors.scale).filter(k => selectors.scale[k]);
@@ -713,7 +781,7 @@ function updateUrlParams() {
 
 function applyUrlParams(urlParams) {
     if (urlParams.benchmark) {
-        selectors.benchmark = urlParams.benchmark;
+        setSelectionFromList(selectors.benchmark, urlParams.benchmark.split(','));
     }
     
     if (urlParams.scale) {
@@ -783,18 +851,107 @@ function clearElement(elem) {
     }
 }
 
+function getSelectedValues(selectors_map) {
+    return Object.keys(selectors_map).filter(key => selectors_map[key]);
+}
+
+function setSelectionFromList(selectors_map, selected_values) {
+    const selectedSet = new Set(selected_values);
+    Object.keys(selectors_map).forEach(key => {
+        selectors_map[key] = selectedSet.has(key);
+    });
+}
+
+function getDefaultSelectedBenchmarks(benchmarks) {
+    const configured = DEFAULT_SELECTED_BENCHMARKS[pageMode] || [];
+    const validConfigured = configured.filter(benchmark => benchmarks.includes(benchmark));
+    if (validConfigured.length > 0) {
+        return validConfigured;
+    }
+    return benchmarks.length > 0 ? [benchmarks[0]] : [];
+}
+
+function getDefaultSelectedScales(scales) {
+    const configured = DEFAULT_SELECTED_SCALES[pageMode] || [];
+    const validConfigured = configured.filter(scale => scales.includes(scale));
+    if (validConfigured.length > 0) {
+        return validConfigured;
+    }
+    return scales;
+}
+
+function getBenchmarkScaleGroups(entries) {
+    const groups = new Map();
+
+    entries.forEach(entry => {
+        const key = `${entry.benchmark}::${entry.scale}`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                key,
+                benchmark: entry.benchmark,
+                scale: entry.scale,
+                entries: [],
+            });
+        }
+        groups.get(key).entries.push(entry);
+    });
+
+    return [...groups.values()].sort((left, right) => {
+        const benchmarkComparison = naturalSort(left.benchmark, right.benchmark);
+        if (benchmarkComparison !== 0) {
+            return benchmarkComparison;
+        }
+        return naturalSort(left.scale, right.scale);
+    });
+}
+
+function getBenchmarkScaleGroupLabel(group) {
+    return `${group.benchmark} / ${group.scale}`;
+}
+
+function appendSummaryGroupHeader(table, group) {
+    const row = document.createElement('tr');
+    row.className = 'summary-group-row';
+
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.className = 'summary-group-title';
+    cell.appendChild(document.createTextNode(getBenchmarkScaleGroupLabel(group)));
+
+    row.appendChild(cell);
+    table.appendChild(row);
+}
+
+function setDetailedComparisonVisible(visible) {
+    document.getElementById('details-title').style.display = visible ? 'block' : 'none';
+    document.getElementById('details').style.display = visible ? 'table' : 'none';
+}
+
+function updateSelectorGroupUI(containerId, selectors_map, allSelectorId) {
+    [...document.getElementById(containerId).querySelectorAll('a')].forEach(elem => {
+        if (allSelectorId && elem.id === allSelectorId) {
+            elem.className = getSelectedValues(selectors_map).length === Object.keys(selectors_map).length
+                ? 'selector selector-active'
+                : 'selector';
+            return;
+        }
+
+        const key = elem.textContent;
+        elem.className = selectors_map[key] ? 'selector selector-active' : 'selector';
+    });
+}
+
 function toggle(e, elem, selectors_map) {
     selectors_map[elem] = !selectors_map[elem];
-    e.target.className = selectors_map[elem] ? 'selector selector-active' : 'selector';
+    updateSelectorsUI();
     updateUrlParams();
     render();
 }
 
 function toggleAll(e, selectors_map) {
     const new_value = Object.keys(selectors_map).filter(k => selectors_map[k]).length * 2 < Object.keys(selectors_map).length;
-    [...e.target.parentElement.querySelectorAll('a')].map(
-        elem => { elem.className = new_value ? 'selector selector-active' : 'selector' });
     Object.keys(selectors_map).map(k => { selectors_map[k] = new_value });
+    updateSelectorsUI();
     updateUrlParams();
     render();
 }
@@ -914,32 +1071,28 @@ function initSelectors() {
     // Extract available threads
     availableThreads = extractAvailableThreads(activeData);
     
-    // Create benchmark selectors (single select)
-    benchmarks.forEach((elem, index) => {
+    const defaultBenchmarks = new Set(getDefaultSelectedBenchmarks(benchmarks));
+    const defaultScales = new Set(getDefaultSelectedScales(scales));
+
+    // Create benchmark selectors
+    benchmarks.forEach(elem => {
         let selector = document.createElement('a');
-        // Select first benchmark by default if none selected
-        const isSelected = selectors.benchmark === elem || (selectors.benchmark === null && index === 0);
+        const isSelected = defaultBenchmarks.has(elem);
+        selectors.benchmark[elem] = isSelected;
         selector.className = isSelected ? 'selector selector-active' : 'selector';
         selector.appendChild(document.createTextNode(elem));
         benchmarkContainer.appendChild(selector);
-        if (isSelected) {
-            selectors.benchmark = elem;
-        }
-        selector.addEventListener('click', e => {
-            selectors.benchmark = elem;
-            updateBenchmarkSelector();
-            updateUrlParams();
-            render();
-        });
+        selector.addEventListener('click', e => toggle(e, elem, selectors.benchmark));
     });
     
     // Create scale selectors
     scales.forEach(elem => {
         let selector = document.createElement('a');
-        selector.className = 'selector selector-active';
+        const isSelected = defaultScales.has(elem);
+        selector.className = isSelected ? 'selector selector-active' : 'selector';
         selector.appendChild(document.createTextNode(elem));
         scaleContainer.appendChild(selector);
-        selectors.scale[elem] = true;
+        selectors.scale[elem] = isSelected;
         selector.addEventListener('click', e => toggle(e, elem, selectors.scale));
     });
     
@@ -1000,6 +1153,7 @@ function initSelectors() {
     });
     
     // Toggle all buttons
+    document.getElementById('select-all-benchmarks').addEventListener('click', e => toggleAll(e, selectors.benchmark));
     document.getElementById('select-all-scales').addEventListener('click', e => toggleAll(e, selectors.scale));
     document.getElementById('select-all-systems').addEventListener('click', e => toggleAll(e, selectors.system));
     document.getElementById('select-all-machines').addEventListener('click', e => toggleAll(e, selectors.machine));
@@ -1084,8 +1238,12 @@ function initSelectors() {
     const urlParams = getUrlParams();
     applyUrlParams(urlParams);
 
-    if (!selectors.benchmark || !benchmarks.includes(selectors.benchmark)) {
-        selectors.benchmark = benchmarks[0] || null;
+    if (getSelectedValues(selectors.benchmark).length === 0) {
+        setSelectionFromList(selectors.benchmark, getDefaultSelectedBenchmarks(benchmarks));
+    }
+
+    if (getSelectedValues(selectors.scale).length === 0) {
+        setSelectionFromList(selectors.scale, getDefaultSelectedScales(scales));
     }
     
     // Apply theme from URL or localStorage (URL takes priority)
@@ -1103,45 +1261,16 @@ function initSelectors() {
 }
 
 function updateSelectorsUI() {
-    // Update benchmark selectors (single select)
     updateBenchmarkSelector();
-    
-    // Update scale selectors
-    [...document.getElementById('selectors_scale').querySelectorAll('a:not(#select-all-scales)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.scale[key] ? 'selector selector-active' : 'selector';
-    });
-    
-    // Update system selectors
-    [...document.getElementById('selectors_system').querySelectorAll('a:not(#select-all-systems)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.system[key] ? 'selector selector-active' : 'selector';
-    });
-    
-    // Update machine selectors
-    [...document.getElementById('selectors_machine').querySelectorAll('a:not(#select-all-machines)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.machine[key] ? 'selector selector-active' : 'selector';
-    });
-
-    // Update version selectors
-    [...document.getElementById('selectors_version').querySelectorAll('a:not(#select-all-versions)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.version[key] ? 'selector selector-active' : 'selector';
-    });
-    
-    // Update cluster selectors
-    [...document.getElementById('selectors_cluster').querySelectorAll('a:not(#select-all-clusters)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.cluster[key] ? 'selector selector-active' : 'selector';
-    });
+    updateSelectorGroupUI('selectors_scale', selectors.scale, 'select-all-scales');
+    updateSelectorGroupUI('selectors_system', selectors.system, 'select-all-systems');
+    updateSelectorGroupUI('selectors_machine', selectors.machine, 'select-all-machines');
+    updateSelectorGroupUI('selectors_version', selectors.version, 'select-all-versions');
+    updateSelectorGroupUI('selectors_cluster', selectors.cluster, 'select-all-clusters');
 }
 
 function updateBenchmarkSelector() {
-    [...document.getElementById('selectors_benchmark').querySelectorAll('a')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.benchmark === key ? 'selector selector-active' : 'selector';
-    });
+    updateSelectorGroupUI('selectors_benchmark', selectors.benchmark, 'select-all-benchmarks');
 }
 
 function updateThreadSelector() {
@@ -1331,9 +1460,11 @@ function getJmeterResult(entry, threadCount) {
 }
 
 // Render summary for single thread mode
-function renderSummarySingleThread(filtered_data) {
-    let table = document.getElementById('summary');
-    clearElement(table);
+function renderSummarySingleThread(filtered_data, options = {}) {
+    let table = options.table || document.getElementById('summary');
+    if (!options.append) {
+        clearElement(table);
+    }
     
     if (filtered_data.length === 0) return [[], []];
     
@@ -1452,9 +1583,11 @@ function renderSummarySingleThread(filtered_data) {
 
 
 // Render summary for multi-thread (JMeter) mode
-function renderSummaryMultiThread(filtered_data) {
-    let table = document.getElementById('summary');
-    clearElement(table);
+function renderSummaryMultiThread(filtered_data, options = {}) {
+    let table = options.table || document.getElementById('summary');
+    if (!options.append) {
+        clearElement(table);
+    }
     
     // Filter entries that have JMeter results for the selected thread count
     const jmeterData = filtered_data.filter(e => getJmeterResult(e, selectors.thread) !== null);
@@ -1573,16 +1706,18 @@ function renderSummaryMultiThread(filtered_data) {
 
 // Main render function
 function render() {
+    let summary = document.getElementById('summary');
     let details_head = document.getElementById('details_head');
     let details_body = document.getElementById('details_body');
     
+    clearElement(summary);
     clearElement(details_head);
     clearElement(details_body);
     
     // Filter data
     let filtered_data = processedData.filter(elem =>
         elem.page === pageMode &&
-        selectors.benchmark === elem.benchmark &&
+        selectors.benchmark[elem.benchmark] &&
         selectors.scale[elem.scale] &&
         selectors.system[elem.system] &&
         selectors.machine[elem.machine] &&
@@ -1600,6 +1735,8 @@ function render() {
             // For hot, cold, combined metrics, require non-empty query results
             filtered_data = filtered_data.filter(e => e.result && e.result.length > 0);
         }
+    } else {
+        filtered_data = filtered_data.filter(e => getJmeterResult(e, selectors.thread) !== null);
     }
     
     // Show/hide nothing selected message
@@ -1607,10 +1744,12 @@ function render() {
     if (filtered_data.length === 0) {
         nothing_selected.style.display = 'block';
         [...document.querySelectorAll('.comparison')].map(e => e.style.display = 'none');
+        setDetailedComparisonVisible(false);
         return;
     }
     nothing_selected.style.display = 'none';
-    [...document.querySelectorAll('.comparison')].map(e => e.style.display = 'block');
+    document.getElementById('summary-title').style.display = 'block';
+    document.getElementById('summary-comparison').style.display = 'table';
     
     // Initialize query checkboxes for single thread mode
     if (selectors.thread === 1) {
@@ -1633,22 +1772,49 @@ function render() {
             }
         });
     }
+
+    const benchmarkScaleGroups = getBenchmarkScaleGroups(filtered_data);
+    const showDetailedComparison = benchmarkScaleGroups.length === 1;
+    let detailGroupData = null;
+    let sorted_indices = [];
+    let baseline_data = [];
     
     // Render based on thread selection
-    let sorted_indices, baseline_data;
     if (selectors.thread === 1) {
-        [sorted_indices, baseline_data] = renderSummarySingleThread(filtered_data);
         document.getElementById('better-direction').textContent = 'lower is better';
-        renderDetailsSingleThread(filtered_data, sorted_indices, baseline_data);
+
+        benchmarkScaleGroups.forEach(group => {
+            appendSummaryGroupHeader(summary, group);
+            [sorted_indices, baseline_data] = renderSummarySingleThread(group.entries, { table: summary, append: true });
+            if (showDetailedComparison) {
+                detailGroupData = group.entries;
+            }
+        });
+
+        if (showDetailedComparison && detailGroupData) {
+            renderDetailsSingleThread(detailGroupData, sorted_indices, baseline_data);
+        }
     } else {
-        [sorted_indices, baseline_data] = renderSummaryMultiThread(filtered_data);
         if (selectors.metric === 'qps' || selectors.metric === 'succ-qps') {
             document.getElementById('better-direction').textContent = 'higher is better';
         } else {
             document.getElementById('better-direction').textContent = 'lower is better';
         }
-        renderDetailsMultiThread(filtered_data, sorted_indices);
+
+        benchmarkScaleGroups.forEach(group => {
+            appendSummaryGroupHeader(summary, group);
+            [sorted_indices] = renderSummaryMultiThread(group.entries, { table: summary, append: true });
+            if (showDetailedComparison) {
+                detailGroupData = group.entries;
+            }
+        });
+
+        if (showDetailedComparison && detailGroupData) {
+            renderDetailsMultiThread(detailGroupData, sorted_indices);
+        }
     }
+
+    setDetailedComparisonVisible(showDetailedComparison);
     
     document.getElementById("scale_hint").textContent = 'Different colors represent values at different scales (1x, 10x, 100x zoom)';
 }
