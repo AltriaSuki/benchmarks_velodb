@@ -70,6 +70,46 @@ make result
 ```
 This generates a static html page `index.html` in the project root directory, which you can open in a browser to view the results.
 
+The generated report supports two views:
+- Main benchmark: `index.html`
+- Versions benchmark: `index.html?page=versions`
+
+#### HTML Metrics Explanation
+
+The main benchmark page and the versions benchmark page use the same metric definitions.
+
+- `Cold Run`: uses the first recorded execution time of each selected query. The displayed value is the sum of selected query times. Sorting follows this displayed total time, so lower is better.
+- `Hot Run`: uses the faster value of the second and third execution time of each selected query, i.e. `min(run2, run3)`. The displayed value is the sum of selected query times. Sorting follows this displayed total time, so lower is better.
+- `Load Time`: uses the total load time, i.e. the sum of all values in `results.load.load_times`. Lower is better.
+- `Storage Size`: uses `results.load.data_size_bytes`. Lower is better.
+- `Combined`: uses a weighted geometric mean of four relative factors: load time, storage size, cold-query score, and hot-query score. The formula is:
+
+```text
+combined_raw =
+exp(
+  0.1 * log(load_time / best_load_time) +
+  0.1 * log(data_size / best_data_size) +
+  0.2 * log(cold_query_score) +
+  0.6 * log(hot_query_score)
+)
+
+combined = combined_raw / min(combined_raw among filtered entries)
+```
+
+Where:
+- `cold_query_score` is the geometric mean of per-query relative cold-run ratios.
+- `hot_query_score` is the geometric mean of per-query relative hot-run ratios.
+- The weights are `load=0.1`, `size=0.1`, `cold=0.2`, `hot=0.6`.
+- After normalization, the best filtered entry is always shown as `×1.00`.
+
+- `QPS`: uses JMeter total throughput, i.e. `throughput`. Higher is better.
+- `Successful QPS`: uses `throughput * (1 - errorPct / 100)`. Higher is better.
+- `Avg Latency`: uses JMeter `meanResTime`, converted from milliseconds to seconds. Lower is better.
+- `P99 Latency`: uses JMeter `pct3ResTime`, converted from milliseconds to seconds. Lower is better.
+- `Error %`: uses JMeter `errorPct`. Lower is better.
+
+For all summary rows that display a relative multiplier such as `×1.23`, the multiplier is normalized against the best currently filtered entry for the selected metric.
+
 ### Submit Test Results
 
 1. After completing the test, rename the generated `result.json` (e.g., `aws.32C.json`).
