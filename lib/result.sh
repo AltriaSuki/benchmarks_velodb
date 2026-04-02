@@ -13,6 +13,7 @@ generate_result() {
     local query_csv="$RESULT_DIR/query.csv"
     local jmeter_config="$RESULT_DIR/jmeter_config.json"
     local statistics_json="$RESULT_DIR/html_report/statistics.json"
+    local sysbench_metrics_json="$RESULT_DIR/sysbench_metrics.json"
     local create_time
     create_time=$(date '+%Y-%m-%d')
 
@@ -156,6 +157,16 @@ generate_result() {
       }
       ' > "$result_json"
 
+    if [ -f "$sysbench_metrics_json" ]; then
+        local sysbench_tmp_json="$RESULT_DIR/.result_sysbench.json"
+        if jq --argjson sysbench_metrics "$(cat "$sysbench_metrics_json")"             '.results.sysbench = $sysbench_metrics' "$result_json" > "$sysbench_tmp_json"; then
+            mv "$sysbench_tmp_json" "$result_json"
+        else
+            rm -f "$sysbench_tmp_json"
+            echo "ERROR: Failed to merge sysbench metrics into result.json" >&2
+        fi
+    fi
+
     # Validate the final JSON output
     if jq '.' "$result_json" >/dev/null 2>&1; then
         echo "Report generated: $result_json"
@@ -196,7 +207,8 @@ generate_basic_report() {
     },
     "jmeter": {
       "test_results": []
-    }
+    },
+    "sysbench": {}
   }
 }
 EOF

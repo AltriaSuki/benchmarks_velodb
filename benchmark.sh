@@ -17,14 +17,7 @@ TEST_ROOT=""
 ENGINE_TYPE=""
 RESULT_DIR=""
 TIMESTAMP=""
-TEMP_FILES=()
 LAST_TEMP_FILE=""
-
-# Track and clean temporary files created by this script.
-register_temp_file() {
-    TEMP_FILES+=("$1")
-}
-
 
 create_temp_sql_file() {
     local prefix="$1"
@@ -32,10 +25,8 @@ create_temp_sql_file() {
     local tmp_file
     safe_prefix="${prefix//[^a-zA-Z0-9_.-]/_}"
     tmp_file="$(mktemp "${TMPDIR:-/tmp}/bench_${safe_prefix}.XXXXXX.sql")" || die "Failed to create temporary file"
-    register_temp_file "$tmp_file"
     LAST_TEMP_FILE="$tmp_file"
 }
-
 
 # Load modular components
 source "$SCRIPT_DIR/lib/tools_utils.sh"
@@ -65,6 +56,10 @@ die() {
     exit 1
 }
 
+is_sysbench_enabled() {
+    [[ "$(yq eval '.sysbench.enabled // "false"' "$CONFIG_FILE")" == "true" ]]
+}
+
 # Check dependencies
 # TODO(zgx): move this function to lib dir and install all dependencies
 check_dependencies() {
@@ -85,6 +80,10 @@ check_dependencies() {
     if [[ "${jmeter:-}" == "true" ]]; then
         init_java_env
         init_jmeter_tools
+    fi
+
+    if is_sysbench_enabled; then
+        init_sysbench
     fi
 }
 
@@ -221,15 +220,19 @@ load_storage_config() {
     fi
 
     # 2. Read each field from benchmark.yaml and expand env vars via eval echo
-    local raw_endpoint raw_region raw_bucket
+    local raw_endpoint raw_region raw_bucket raw_access_key raw_secret_key
     raw_endpoint=$(yq eval '.storage.endpoint // ""' "$CONFIG_FILE")
     raw_region=$(yq eval '.storage.region // ""' "$CONFIG_FILE")
     raw_bucket=$(yq eval '.storage.bucket // ""' "$CONFIG_FILE")
+    raw_access_key=$(yq eval '.storage.access_key // ""' "$CONFIG_FILE")
+    raw_secret_key=$(yq eval '.storage.secret_key // ""' "$CONFIG_FILE")
 
     # Expand environment variables (e.g., ${STORAGE_ENDPOINT:-https://...})
     export STORAGE_ENDPOINT=$(eval echo "$raw_endpoint")
     export STORAGE_REGION=$(eval echo "$raw_region")
     export STORAGE_BUCKET=$(eval echo "$raw_bucket")
+    export STORAGE_ACCESS_KEY=$(eval echo "$raw_access_key")
+    export STORAGE_SECRET_KEY=$(eval echo "$raw_secret_key")
 
     echo "Storage: endpoint=$STORAGE_ENDPOINT bucket=$STORAGE_BUCKET"
 }
@@ -783,6 +786,18 @@ run_vectordbbench() {
     execute_vectordbbench_task
 }
 
+run_sysbench() {
+    local runner_file="$LIB_DIR/sysbench_runner.sh"
+    if [ ! -f "$runner_file" ]; then
+        die "Sysbench runner not found: $runner_file"
+    fi
+
+    # Source the runner and execute
+    # shellcheck source=lib/sysbench_runner.sh
+    source "$runner_file"
+    execute_sysbench_task
+}
+
 # Main execution function
 main() {
     # Initialize tools early (especially yq which is needed for config parsing)
@@ -815,6 +830,7 @@ main() {
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
     profile="${profile:-${PROFILE:-false}}"
     plan="${plan:-${PLAN:-false}}"
+    vectordbbench="${vectordbbench:-false}"
 
     if [[ "${drop_database,,}" != "true" ]]; then
         drop_database="false"
@@ -868,6 +884,10 @@ main() {
     else
         generate_jmx
         run_jmeter
+    fi
+
+    if is_sysbench_enabled; then
+        run_sysbench
     fi
 
     if [[ "$vectordbbench" == "true" ]]; then
