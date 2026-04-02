@@ -1,4 +1,3 @@
 benchmarks.tar.gz
 tools/*
-!tools/sysbench_dir/
-!tools/sysbench_dir/**
+/results/
