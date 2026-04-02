@@ -1,6 +1,6 @@
 LOAD LABEL customer_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf1000/customer/customer_[0-9]*.dat")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf1000/customer/customer_[0-9]*.dat.gz")
     INTO TABLE customer
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
@@ -15,6 +15,6 @@ WITH S3
 PROPERTIES
 (
     "timeout" = "36000",
-    "load_parallelism" = "8",
+
     "max_filter_ratio" = "0.1"
 );

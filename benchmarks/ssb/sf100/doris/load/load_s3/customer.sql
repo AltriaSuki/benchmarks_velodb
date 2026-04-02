@@ -4,7 +4,8 @@ LOAD LABEL customer_${TIMESTAMP}
     INTO TABLE customer
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
-    (c_custkey,c_name,c_address,c_city,c_nation,c_region,c_phone,c_mktsegment)
+    (c_custkey,c_name,c_address,c_city,c_nation,c_region,c_phone,c_mktsegment,no_use)
+    PROPERTIES("skip_lines" = "0")
 )
 WITH S3
 (
@@ -15,6 +16,6 @@ WITH S3
 PROPERTIES
 (
     "timeout" = "36000",
-    "load_parallelism" = "8",
+
     "max_filter_ratio" = "0.1"
 );

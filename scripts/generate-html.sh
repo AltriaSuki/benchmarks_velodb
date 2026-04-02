@@ -10,71 +10,160 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 BENCHMARKS_DIR="$PROJECT_ROOT/benchmarks"
+VERSIONS_RESULTS_DIR="$PROJECT_ROOT/versions/results"
 OUTPUT_FILE="$PROJECT_ROOT/index.html"
+
+# Default selected filters in the generated HTML.
+# Empty benchmark arrays fall back to the first available benchmark on the page.
+# Empty scale arrays fall back to all available scales on the page.
+DEFAULT_MAIN_BENCHMARKS=(ssb ssb_flat tpcds tpch)
+DEFAULT_VERSIONS_BENCHMARKS=(ssb ssb_flat tpcds tpch)
+DEFAULT_MAIN_SCALES=(sf1000)
+DEFAULT_VERSIONS_SCALES=(sf1000)
 
 # --- Functions ---
 
-# Convert result.json to JS data format
-generate_data_js() {
+js_array_from_values() {
     local first=true
-    echo "const benchmarkData = ["
-    
-    # Find all result files
-    while IFS= read -r -d '' filepath; do
-        # Extract path components
-        relative_path="${filepath#$BENCHMARKS_DIR/}"
-        path_before_results="${relative_path%/results/*}"
-        segment_count=$(echo "$path_before_results" | tr '/' '\n' | wc -l)
-        
-        benchmark=$(echo "$relative_path" | cut -d'/' -f1)
-        
-        if [ "$segment_count" -eq 3 ]; then
-            # 4-level structure: benchmark/scale/database/results
-            scale=$(echo "$relative_path" | cut -d'/' -f2)
-            database=$(echo "$relative_path" | cut -d'/' -f3)
-        else
-            # 3-level structure: benchmark/database/results (no scale factor)
-            scale="default"
-            database=$(echo "$relative_path" | cut -d'/' -f2)
-        fi
-        
-        filename=$(basename "$filepath")
-        hardware="${filename%.json}"
-        id="$benchmark-$scale-$database-$hardware"
-        github_url="https://github.com/velodb/benchmarks/blob/master/benchmarks/$relative_path"
-        
-        # Read JSON file and extract data
-        json_content=$(cat "$filepath")
-        
-        # Extract metadata fields
-        # Convert system name to title case (capitalize first letter)
-        system=$(echo "$json_content" | jq -r '.metadata.system // "Unknown"' | sed 's/\b\(.\)/\u\1/g')
-        version=$(echo "$json_content" | jq -r '.metadata.version // ""')
-        create_time=$(echo "$json_content" | jq -r '.metadata.create_time // ""')
-        machine=$(echo "$json_content" | jq -r '.metadata.machine // ""')
-        cluster_size=$(echo "$json_content" | jq -r '.metadata.cluster_size // 1')
-        tags=$(echo "$json_content" | jq -c '.metadata.tags // []')
-        
-        # Extract load data
-        load_times=$(echo "$json_content" | jq -c '.results.load.load_times // {}')
-        data_size_bytes=$(echo "$json_content" | jq -r '.results.load.data_size_bytes // null')
-        
-        # Extract query times and convert to array format
-        query_times=$(echo "$json_content" | jq -c '.results.query.query_times // {}')
-        
-        # Extract JMeter results
-        jmeter_results=$(echo "$json_content" | jq -c '.results.jmeter.test_results // []')
-        
+    local value
+
+    printf '['
+    for value in "$@"; do
         if [ "$first" = true ]; then
             first=false
         else
+            printf ', '
+        fi
+        jq -Rn --arg value "$value" '$value'
+    done
+    printf ']'
+}
+
+emit_default_selection_config() {
+    local main_benchmarks_js
+    local versions_benchmarks_js
+    local main_scales_js
+    local versions_scales_js
+
+    main_benchmarks_js="$(js_array_from_values "${DEFAULT_MAIN_BENCHMARKS[@]}")"
+    versions_benchmarks_js="$(js_array_from_values "${DEFAULT_VERSIONS_BENCHMARKS[@]}")"
+    main_scales_js="$(js_array_from_values "${DEFAULT_MAIN_SCALES[@]}")"
+    versions_scales_js="$(js_array_from_values "${DEFAULT_VERSIONS_SCALES[@]}")"
+
+    cat <<EOF
+// Configure default selected filters here.
+const DEFAULT_SELECTED_BENCHMARKS = {
+    main: $main_benchmarks_js,
+    versions: $versions_benchmarks_js,
+};
+
+const DEFAULT_SELECTED_SCALES = {
+    main: $main_scales_js,
+    versions: $versions_scales_js,
+};
+
+EOF
+}
+
+parse_result_path() {
+    local relative_path="$1"
+    local -n benchmark_ref="$2"
+    local -n scale_ref="$3"
+    local -n database_ref="$4"
+    local path_prefix
+    local -a segments
+    local segment_count
+    local parsed_benchmark
+    local parsed_scale
+    local parsed_database
+
+    if [[ "$relative_path" == */results/* ]]; then
+        path_prefix="${relative_path%/results/*}"
+    else
+        path_prefix="${relative_path%/*}"
+    fi
+
+    IFS='/' read -r -a segments <<< "$path_prefix"
+    segment_count="${#segments[@]}"
+
+    parsed_benchmark="${segments[0]}"
+    parsed_database="${segments[$((segment_count - 1))]}"
+
+    if [ "$segment_count" -ge 3 ]; then
+        parsed_scale="${segments[$((segment_count - 2))]}"
+    else
+        parsed_scale="default"
+    fi
+
+    benchmark_ref="$parsed_benchmark"
+    scale_ref="$parsed_scale"
+    database_ref="$parsed_database"
+}
+
+append_data_entries() {
+    local dataset="$1"
+    local base_dir="$2"
+    local github_prefix="$3"
+    local first_ref_name="$4"
+
+    if [ ! -d "$base_dir" ]; then
+        return
+    fi
+
+    while IFS= read -r -d '' filepath; do
+        local relative_path
+        local benchmark
+        local scale
+        local database
+        local filename
+        local hardware
+        local id
+        local github_url
+        local system
+        local version
+        local create_time
+        local machine
+        local cluster_size
+        local tags
+        local load_times
+        local data_size_bytes
+        local query_times
+        local jmeter_results
+
+        relative_path="${filepath#$base_dir/}"
+        parse_result_path "$relative_path" benchmark scale database
+
+        filename=$(basename "$filepath")
+        hardware="${filename%.json}"
+        github_url="https://github.com/velodb/benchmarks/blob/master/$github_prefix/$relative_path"
+
+        system=$(jq -r '.metadata.system // "Unknown"' "$filepath" | sed 's/\b\(.\)/\u\1/g')
+        version=$(jq -r '.metadata.version // ""' "$filepath")
+        create_time=$(jq -r '.metadata.create_time // ""' "$filepath")
+        machine=$(jq -r '.metadata.machine // ""' "$filepath")
+        cluster_size=$(jq -r '.metadata.cluster_size // 1' "$filepath")
+        tags=$(jq -c '.metadata.tags // []' "$filepath")
+        load_times=$(jq -c '.results.load.load_times // {}' "$filepath")
+        data_size_bytes=$(jq -r '.results.load.data_size_bytes // null' "$filepath")
+        query_times=$(jq -c '.results.query.query_times // {}' "$filepath")
+        jmeter_results=$(jq -c '.results.jmeter.test_results // []' "$filepath")
+
+        if [ "$dataset" = "versions" ] && [ -n "$version" ] && [ "${hardware#"$version."}" != "$hardware" ]; then
+            hardware="${hardware#"$version."}"
+        fi
+
+        id="$dataset-$benchmark-$scale-$database-${version:-unknown}-$hardware"
+
+        if [ "${!first_ref_name}" = true ]; then
+            printf -v "$first_ref_name" '%s' false
+        else
             echo ","
         fi
-        
-        # Output the data entry
+
         cat << EOF
 {
     "id": "$id",
+    "page": "$dataset",
     "benchmark": "$benchmark",
     "scale": "$scale",
     "database": "$database",
@@ -92,8 +181,23 @@ generate_data_js() {
     "jmeter_results": $jmeter_results
 }
 EOF
-    done < <(find "$BENCHMARKS_DIR" -path "*/results/*.json" -print0 | sort -z)
-    
+    done < <(
+        if [ "$dataset" = "main" ]; then
+            find "$base_dir" -path "*/results/*.json" -print0
+        else
+            find "$base_dir" -name '*.json' -print0
+        fi | sort -z
+    )
+}
+
+# Convert result.json to JS data format
+generate_data_js() {
+    local first=true
+    echo "const benchmarkData = ["
+
+    append_data_entries "main" "$BENCHMARKS_DIR" "benchmarks" first
+    append_data_entries "versions" "$VERSIONS_RESULTS_DIR" "versions/results" first
+
     echo "];"
 }
 
@@ -260,10 +364,20 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
             background: var(--summary-every-other-row-color);
         }
 
+        #summary tr.summary-group-row:nth-child(odd) {
+            background: transparent;
+        }
+
         .summary-name {
             white-space: nowrap;
             text-align: right;
             padding-right: 1rem;
+        }
+
+        .summary-group-title {
+            text-align: left;
+            font-weight: bold;
+            padding: 1.25rem 0 0.5rem 0;
         }
 
         .summary-bar-cell {
@@ -435,16 +549,18 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
 
 <div class="header stick-left">
     <span class="nowrap themes"><span id="toggle-dark">🌚</span><span id="toggle-light">🌞</span></span>
-    <h1>VeloDB Benchmarks - Database Performance Comparison
-    </h1>
+    <h1 id="page-title">VeloDB Benchmarks - Database Performance Comparison</h1>
     <a href="https://github.com/velodb/benchmarks">GitHub Repository</a> | 
-    <a href="https://github.com/velodb/benchmarks#readme">Methodology</a> 
+    <a href="https://github.com/velodb/benchmarks#readme">Methodology</a> |
+    <a id="main-benchmark-link" href="index.html">Main Benchmark</a> |
+    <a id="versions-benchmark-link" href="index.html?page=versions">Versions Benchmark</a>
 </div>
 
 <table class="selectors-container stick-left">
     <tr>
         <th>Benchmark: </th>
         <td id="selectors_benchmark">
+            <a id="select-all-benchmarks" class="selector selector-active">All</a>
         </td>
     </tr>
     <tr>
@@ -463,6 +579,12 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
         <th>Machine: </th>
         <td id="selectors_machine">
             <a id="select-all-machines" class="selector selector-active">All</a>
+        </td>
+    </tr>
+    <tr id="version-selector-row">
+        <th>Version: </th>
+        <td id="selectors_version">
+            <a id="select-all-versions" class="selector selector-active">All</a>
         </td>
     </tr>
     <tr>
@@ -493,11 +615,15 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
     </tr>
 </table>
 
-<table class="stick-left comparison">
+<div id="summary-title" class="stick-left comparison">
+    <h2>Summary Comparison</h2>
+</div>
+
+<table id="summary-comparison" class="stick-left comparison">
     <thead>
         <tr>
             <th class="summary-name">
-                System &amp; Machine
+                System / Machine / Version
             </th>
             <th colspan="2">
                 Relative <span id="time-or-size">time</span> (<span id="better-direction">lower is better</span>).<br/>
@@ -511,7 +637,7 @@ cat > "$OUTPUT_FILE" << 'HTMLHEAD'
 
 <div id="nothing-selected" class="stick-left">Nothing selected</div>
 
-<div class="stick-left comparison">
+<div id="details-title" class="stick-left comparison">
     <h2>Detailed Comparison</h2>
 </div>
 
@@ -530,6 +656,7 @@ HTMLHEAD
 # Generate and embed the data
 echo "Collecting benchmark data..."
 generate_data_js >> "$OUTPUT_FILE"
+emit_default_selection_config >> "$OUTPUT_FILE"
 
 # Add the JavaScript logic
 cat >> "$OUTPUT_FILE" << 'HTMLJS'
@@ -545,10 +672,11 @@ const combined_hot_share = 0.6;
 
 // State management
 let selectors = {
-    "benchmark": null,  // Single select - stores the selected benchmark name
+    "benchmark": {},
     "scale": {},
     "system": {},
     "machine": {},
+    "version": {},
     "cluster": {},
     "thread": 1,
     "metric": "hot",
@@ -561,6 +689,17 @@ let availableThreads = [1];
 
 let theme = 'light';
 
+function detectPageMode(pathname, search) {
+    const params = new URLSearchParams(search);
+    const pageParam = params.get('page');
+    if (pageParam === 'versions') {
+        return 'versions';
+    }
+    return 'main';
+}
+
+const pageMode = detectPageMode(window.location.pathname, window.location.search);
+
 // URL parameter management
 function getUrlParams() {
     const params = new URLSearchParams(window.location.search);
@@ -569,6 +708,7 @@ function getUrlParams() {
         scale: params.get('scale'),
         system: params.get('system'),
         machine: params.get('machine'),
+        version: params.get('version'),
         cluster: params.get('cluster'),
         thread: params.get('thread'),
         metric: params.get('metric'),
@@ -578,10 +718,16 @@ function getUrlParams() {
 
 function updateUrlParams() {
     const params = new URLSearchParams();
+
+    if (pageMode === 'versions') {
+        params.set('page', 'versions');
+    }
     
     // Only add non-default values to URL
-    if (selectors.benchmark) {
-        params.set('benchmark', selectors.benchmark);
+    const selectedBenchmarks = getSelectedValues(selectors.benchmark);
+    const allBenchmarks = Object.keys(selectors.benchmark);
+    if (selectedBenchmarks.length !== allBenchmarks.length && selectedBenchmarks.length > 0) {
+        params.set('benchmark', selectedBenchmarks.join(','));
     }
     
     const selectedScales = Object.keys(selectors.scale).filter(k => selectors.scale[k]);
@@ -600,6 +746,12 @@ function updateUrlParams() {
     const allMachines = Object.keys(selectors.machine);
     if (selectedMachines.length !== allMachines.length && selectedMachines.length > 0) {
         params.set('machine', selectedMachines.join(','));
+    }
+
+    const selectedVersions = Object.keys(selectors.version).filter(k => selectors.version[k]);
+    const allVersions = Object.keys(selectors.version);
+    if (selectedVersions.length !== allVersions.length && selectedVersions.length > 0) {
+        params.set('version', selectedVersions.join(','));
     }
     
     const selectedClusters = Object.keys(selectors.cluster).filter(k => selectors.cluster[k]);
@@ -629,7 +781,7 @@ function updateUrlParams() {
 
 function applyUrlParams(urlParams) {
     if (urlParams.benchmark) {
-        selectors.benchmark = urlParams.benchmark;
+        setSelectionFromList(selectors.benchmark, urlParams.benchmark.split(','));
     }
     
     if (urlParams.scale) {
@@ -650,6 +802,13 @@ function applyUrlParams(urlParams) {
         const selected = urlParams.machine.split(',');
         Object.keys(selectors.machine).forEach(k => {
             selectors.machine[k] = selected.includes(k);
+        });
+    }
+
+    if (urlParams.version) {
+        const selected = urlParams.version.split(',');
+        Object.keys(selectors.version).forEach(k => {
+            selectors.version[k] = selected.includes(k);
         });
     }
     
@@ -692,18 +851,107 @@ function clearElement(elem) {
     }
 }
 
+function getSelectedValues(selectors_map) {
+    return Object.keys(selectors_map).filter(key => selectors_map[key]);
+}
+
+function setSelectionFromList(selectors_map, selected_values) {
+    const selectedSet = new Set(selected_values);
+    Object.keys(selectors_map).forEach(key => {
+        selectors_map[key] = selectedSet.has(key);
+    });
+}
+
+function getDefaultSelectedBenchmarks(benchmarks) {
+    const configured = DEFAULT_SELECTED_BENCHMARKS[pageMode] || [];
+    const validConfigured = configured.filter(benchmark => benchmarks.includes(benchmark));
+    if (validConfigured.length > 0) {
+        return validConfigured;
+    }
+    return benchmarks.length > 0 ? [benchmarks[0]] : [];
+}
+
+function getDefaultSelectedScales(scales) {
+    const configured = DEFAULT_SELECTED_SCALES[pageMode] || [];
+    const validConfigured = configured.filter(scale => scales.includes(scale));
+    if (validConfigured.length > 0) {
+        return validConfigured;
+    }
+    return scales;
+}
+
+function getBenchmarkScaleGroups(entries) {
+    const groups = new Map();
+
+    entries.forEach(entry => {
+        const key = `${entry.benchmark}::${entry.scale}`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                key,
+                benchmark: entry.benchmark,
+                scale: entry.scale,
+                entries: [],
+            });
+        }
+        groups.get(key).entries.push(entry);
+    });
+
+    return [...groups.values()].sort((left, right) => {
+        const benchmarkComparison = naturalSort(left.benchmark, right.benchmark);
+        if (benchmarkComparison !== 0) {
+            return benchmarkComparison;
+        }
+        return naturalSort(left.scale, right.scale);
+    });
+}
+
+function getBenchmarkScaleGroupLabel(group) {
+    return `${group.benchmark} / ${group.scale}`;
+}
+
+function appendSummaryGroupHeader(table, group) {
+    const row = document.createElement('tr');
+    row.className = 'summary-group-row';
+
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.className = 'summary-group-title';
+    cell.appendChild(document.createTextNode(getBenchmarkScaleGroupLabel(group)));
+
+    row.appendChild(cell);
+    table.appendChild(row);
+}
+
+function setDetailedComparisonVisible(visible) {
+    document.getElementById('details-title').style.display = visible ? 'block' : 'none';
+    document.getElementById('details').style.display = visible ? 'table' : 'none';
+}
+
+function updateSelectorGroupUI(containerId, selectors_map, allSelectorId) {
+    [...document.getElementById(containerId).querySelectorAll('a')].forEach(elem => {
+        if (allSelectorId && elem.id === allSelectorId) {
+            elem.className = getSelectedValues(selectors_map).length === Object.keys(selectors_map).length
+                ? 'selector selector-active'
+                : 'selector';
+            return;
+        }
+
+        const key = elem.textContent;
+        elem.className = selectors_map[key] ? 'selector selector-active' : 'selector';
+    });
+}
+
 function toggle(e, elem, selectors_map) {
     selectors_map[elem] = !selectors_map[elem];
-    e.target.className = selectors_map[elem] ? 'selector selector-active' : 'selector';
+    updateSelectorsUI();
     updateUrlParams();
     render();
 }
 
 function toggleAll(e, selectors_map) {
     const new_value = Object.keys(selectors_map).filter(k => selectors_map[k]).length * 2 < Object.keys(selectors_map).length;
-    [...e.target.parentElement.querySelectorAll('a')].map(
-        elem => { elem.className = new_value ? 'selector selector-active' : 'selector' });
     Object.keys(selectors_map).map(k => { selectors_map[k] = new_value });
+    updateSelectorsUI();
     updateUrlParams();
     render();
 }
@@ -730,6 +978,25 @@ function getTotalLoadTime(load_times) {
     return Object.values(load_times).reduce((sum, time) => sum + (time || 0), 0);
 }
 
+function naturalSort(a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function getDisplayVersion(entry) {
+    return entry.version || 'Unknown';
+}
+
+function getMachineLabel(entry) {
+    return `${entry.cluster_size > 1 ? entry.cluster_size + '×' : ''}${entry.machine || 'Unknown machine'}`;
+}
+
+function getDisplayName(entry, multiline = false) {
+    if (multiline) {
+        return `${entry.system}\n(${getMachineLabel(entry)})\n${getDisplayVersion(entry)}`;
+    }
+    return `${entry.system} (${getMachineLabel(entry)}, ${getDisplayVersion(entry)})`;
+}
+
 // Prepare data for rendering
 function prepareData() {
     return benchmarkData.map(entry => {
@@ -747,10 +1014,24 @@ function prepareData() {
 
 const processedData = prepareData();
 
+function getActiveData() {
+    return processedData.filter(entry => entry.page === pageMode);
+}
+
+function configurePage() {
+    const isVersionsPage = pageMode === 'versions';
+    document.getElementById('page-title').textContent = isVersionsPage
+        ? 'VeloDB Versions Benchmark'
+        : 'VeloDB Benchmarks - Database Performance Comparison';
+    document.getElementById('version-selector-row').style.display = isVersionsPage ? '' : 'none';
+    document.getElementById('main-benchmark-link').className = isVersionsPage ? '' : 'selector-active';
+    document.getElementById('versions-benchmark-link').className = isVersionsPage ? 'selector-active' : '';
+}
+
 // Extract available thread counts from JMeter data
-function extractAvailableThreads() {
+function extractAvailableThreads(entries) {
     const threads = new Set([1]); // Always include 1 for single-thread
-    processedData.forEach(entry => {
+    entries.forEach(entry => {
         if (entry.jmeter_results && entry.jmeter_results.length > 0) {
             entry.jmeter_results.forEach(r => {
                 if (r.config && r.config.threads && r.config.threads > 1) {
@@ -764,49 +1045,54 @@ function extractAvailableThreads() {
 
 // Initialize selectors from data
 function initSelectors() {
+    configurePage();
+
     const benchmarkContainer = document.getElementById('selectors_benchmark');
     const scaleContainer = document.getElementById('selectors_scale');
     const systemContainer = document.getElementById('selectors_system');
     const machineContainer = document.getElementById('selectors_machine');
+    const versionContainer = document.getElementById('selectors_version');
     const clusterContainer = document.getElementById('selectors_cluster');
     const threadContainer = document.getElementById('selectors_thread');
+    const activeData = getActiveData();
+
+    if (activeData.length === 0) {
+        return;
+    }
     
     // Get unique values
-    const benchmarks = [...new Set(processedData.map(e => e.benchmark))].sort();
-    const scales = [...new Set(processedData.map(e => e.scale))].sort();
-    const systems = [...new Set(processedData.map(e => e.system))].sort();
-    const machines = [...new Set(processedData.map(e => e.machine))].filter(m => m).sort();
-    const clusters = [...new Set(processedData.map(e => String(e.cluster_size)))].sort((a, b) => Number(a) - Number(b));
+    const benchmarks = [...new Set(activeData.map(e => e.benchmark))].sort(naturalSort);
+    const scales = [...new Set(activeData.map(e => e.scale))].sort(naturalSort);
+    const systems = [...new Set(activeData.map(e => e.system))].sort(naturalSort);
+    const machines = [...new Set(activeData.map(e => e.machine))].filter(m => m).sort(naturalSort);
+    const versions = [...new Set(activeData.map(e => getDisplayVersion(e)))].sort(naturalSort);
+    const clusters = [...new Set(activeData.map(e => String(e.cluster_size)))].sort((a, b) => Number(a) - Number(b));
     
     // Extract available threads
-    availableThreads = extractAvailableThreads();
+    availableThreads = extractAvailableThreads(activeData);
     
-    // Create benchmark selectors (single select)
-    benchmarks.forEach((elem, index) => {
+    const defaultBenchmarks = new Set(getDefaultSelectedBenchmarks(benchmarks));
+    const defaultScales = new Set(getDefaultSelectedScales(scales));
+
+    // Create benchmark selectors
+    benchmarks.forEach(elem => {
         let selector = document.createElement('a');
-        // Select first benchmark by default if none selected
-        const isSelected = selectors.benchmark === elem || (selectors.benchmark === null && index === 0);
+        const isSelected = defaultBenchmarks.has(elem);
+        selectors.benchmark[elem] = isSelected;
         selector.className = isSelected ? 'selector selector-active' : 'selector';
         selector.appendChild(document.createTextNode(elem));
         benchmarkContainer.appendChild(selector);
-        if (isSelected) {
-            selectors.benchmark = elem;
-        }
-        selector.addEventListener('click', e => {
-            selectors.benchmark = elem;
-            updateBenchmarkSelector();
-            updateUrlParams();
-            render();
-        });
+        selector.addEventListener('click', e => toggle(e, elem, selectors.benchmark));
     });
     
     // Create scale selectors
     scales.forEach(elem => {
         let selector = document.createElement('a');
-        selector.className = 'selector selector-active';
+        const isSelected = defaultScales.has(elem);
+        selector.className = isSelected ? 'selector selector-active' : 'selector';
         selector.appendChild(document.createTextNode(elem));
         scaleContainer.appendChild(selector);
-        selectors.scale[elem] = true;
+        selectors.scale[elem] = isSelected;
         selector.addEventListener('click', e => toggle(e, elem, selectors.scale));
     });
     
@@ -828,6 +1114,16 @@ function initSelectors() {
         machineContainer.appendChild(selector);
         selectors.machine[elem] = true;
         selector.addEventListener('click', e => toggle(e, elem, selectors.machine));
+    });
+
+    // Create version selectors
+    versions.forEach(elem => {
+        let selector = document.createElement('a');
+        selector.className = 'selector selector-active';
+        selector.appendChild(document.createTextNode(elem));
+        versionContainer.appendChild(selector);
+        selectors.version[elem] = true;
+        selector.addEventListener('click', e => toggle(e, elem, selectors.version));
     });
     
     // Create cluster selectors
@@ -857,9 +1153,11 @@ function initSelectors() {
     });
     
     // Toggle all buttons
+    document.getElementById('select-all-benchmarks').addEventListener('click', e => toggleAll(e, selectors.benchmark));
     document.getElementById('select-all-scales').addEventListener('click', e => toggleAll(e, selectors.scale));
     document.getElementById('select-all-systems').addEventListener('click', e => toggleAll(e, selectors.system));
     document.getElementById('select-all-machines').addEventListener('click', e => toggleAll(e, selectors.machine));
+    document.getElementById('select-all-versions').addEventListener('click', e => toggleAll(e, selectors.version));
     document.getElementById('select-all-clusters').addEventListener('click', e => toggleAll(e, selectors.cluster));
     
     // Metric selectors - Single thread
@@ -939,6 +1237,14 @@ function initSelectors() {
     // Apply URL parameters
     const urlParams = getUrlParams();
     applyUrlParams(urlParams);
+
+    if (getSelectedValues(selectors.benchmark).length === 0) {
+        setSelectionFromList(selectors.benchmark, getDefaultSelectedBenchmarks(benchmarks));
+    }
+
+    if (getSelectedValues(selectors.scale).length === 0) {
+        setSelectionFromList(selectors.scale, getDefaultSelectedScales(scales));
+    }
     
     // Apply theme from URL or localStorage (URL takes priority)
     const saved_theme = urlParams.theme || window.localStorage.getItem('theme');
@@ -955,39 +1261,16 @@ function initSelectors() {
 }
 
 function updateSelectorsUI() {
-    // Update benchmark selectors (single select)
     updateBenchmarkSelector();
-    
-    // Update scale selectors
-    [...document.getElementById('selectors_scale').querySelectorAll('a:not(#select-all-scales)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.scale[key] ? 'selector selector-active' : 'selector';
-    });
-    
-    // Update system selectors
-    [...document.getElementById('selectors_system').querySelectorAll('a:not(#select-all-systems)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.system[key] ? 'selector selector-active' : 'selector';
-    });
-    
-    // Update machine selectors
-    [...document.getElementById('selectors_machine').querySelectorAll('a:not(#select-all-machines)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.machine[key] ? 'selector selector-active' : 'selector';
-    });
-    
-    // Update cluster selectors
-    [...document.getElementById('selectors_cluster').querySelectorAll('a:not(#select-all-clusters)')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.cluster[key] ? 'selector selector-active' : 'selector';
-    });
+    updateSelectorGroupUI('selectors_scale', selectors.scale, 'select-all-scales');
+    updateSelectorGroupUI('selectors_system', selectors.system, 'select-all-systems');
+    updateSelectorGroupUI('selectors_machine', selectors.machine, 'select-all-machines');
+    updateSelectorGroupUI('selectors_version', selectors.version, 'select-all-versions');
+    updateSelectorGroupUI('selectors_cluster', selectors.cluster, 'select-all-clusters');
 }
 
 function updateBenchmarkSelector() {
-    [...document.getElementById('selectors_benchmark').querySelectorAll('a')].forEach(elem => {
-        const key = elem.textContent;
-        elem.className = selectors.benchmark === key ? 'selector selector-active' : 'selector';
-    });
+    updateSelectorGroupUI('selectors_benchmark', selectors.benchmark, 'select-all-benchmarks');
 }
 
 function updateThreadSelector() {
@@ -1088,6 +1371,22 @@ function relativeQueryTime(num_queries, baseline_data, elem, metric) {
     return used_queries > 0 ? Math.exp(accumulator / used_queries) : 1;
 }
 
+function getSelectedQueryTotalTime(elem, metric, num_queries) {
+    const no_queries_selected = selectors.queries.filter(x => x).length === 0;
+    let totalTime = 0;
+
+    for (let i = 0; i < num_queries; ++i) {
+        if (no_queries_selected || selectors.queries[i]) {
+            const timing = selectRun(elem.result[i], metric);
+            if (timing !== null) {
+                totalTime += timing;
+            }
+        }
+    }
+
+    return totalTime;
+}
+
 // Colorize cell based on ratio
 function colorize(elem, ratio) {
     let [r, g, b] = [0, 0, 0];
@@ -1161,9 +1460,11 @@ function getJmeterResult(entry, threadCount) {
 }
 
 // Render summary for single thread mode
-function renderSummarySingleThread(filtered_data) {
-    let table = document.getElementById('summary');
-    clearElement(table);
+function renderSummarySingleThread(filtered_data, options = {}) {
+    let table = options.table || document.getElementById('summary');
+    if (!options.append) {
+        clearElement(table);
+    }
     
     if (filtered_data.length === 0) return [[], []];
     
@@ -1191,14 +1492,18 @@ function renderSummarySingleThread(filtered_data) {
         summaries = filtered_data.map(e => e.data_size / min_data_size);
         document.getElementById('time-or-size').innerText = 'size';
     } else if (selectors.metric === 'hot' || selectors.metric === 'cold') {
-        summaries = filtered_data.map(e => relativeQueryTime(num_queries, baseline_data, e, selectors.metric));
+        const totalTimes = filtered_data.map(e => getSelectedQueryTotalTime(e, selectors.metric, num_queries));
+        const minTotalTime = Math.min(...totalTimes.filter(x => x > 0));
+        summaries = totalTimes.map(v => v > 0 ? v / minTotalTime : Infinity);
         document.getElementById('time-or-size').innerText = 'time';
     } else {
-        summaries = filtered_data.map(e => Math.exp(
+        const rawCombinedSummaries = filtered_data.map(e => Math.exp(
             combined_load_time_share * Math.log(e.load_time >= 5 ? (e.load_time / min_load_time) : 1) +
             combined_data_size_share * Math.log(e.data_size >= 1e9 ? (e.data_size / min_data_size) : 2) +
             combined_cold_share * Math.log(relativeQueryTime(num_queries, baseline_data, e, 'cold')) +
             combined_hot_share * Math.log(relativeQueryTime(num_queries, baseline_data, e, 'hot'))));
+        const minCombinedScore = Math.min(...rawCombinedSummaries.filter(x => x > 0));
+        summaries = rawCombinedSummaries.map(v => v > 0 ? v / minCombinedScore : Infinity);
         document.getElementById('time-or-size').innerText = 'time and data size';
     }
     
@@ -1219,7 +1524,7 @@ function renderSummarySingleThread(filtered_data) {
         td_name.className = 'summary-name';
         
         let link = document.createElement('a');
-        const displayName = `${elem.system} (${elem.cluster_size > 1 ? elem.cluster_size + '×' : ''}${elem.machine})`;
+        const displayName = getDisplayName(elem);
         link.appendChild(document.createTextNode(displayName));
         link.href = elem.github;
         link.style.color = `oklch(var(--hashed-link-lightness) 0.2018 ${nameToColor(elem.system.split(' ')[0])})`;
@@ -1242,16 +1547,7 @@ function renderSummarySingleThread(filtered_data) {
             text = `×${ratio.toFixed(2)}`;
         } else {
             // Calculate total time for hot, cold metrics
-            const no_queries_selected = selectors.queries.filter(x => x).length === 0;
-            let totalTime = 0;
-            for (let i = 0; i < num_queries; ++i) {
-                if (no_queries_selected || selectors.queries[i]) {
-                    const timing = selectRun(elem.result[i], selectors.metric);
-                    if (timing !== null) {
-                        totalTime += timing;
-                    }
-                }
-            }
+            const totalTime = getSelectedQueryTotalTime(elem, selectors.metric, num_queries);
             text = `${totalTime.toFixed(2)}s (×${ratio.toFixed(2)})`;
         }
         
@@ -1287,9 +1583,11 @@ function renderSummarySingleThread(filtered_data) {
 
 
 // Render summary for multi-thread (JMeter) mode
-function renderSummaryMultiThread(filtered_data) {
-    let table = document.getElementById('summary');
-    clearElement(table);
+function renderSummaryMultiThread(filtered_data, options = {}) {
+    let table = options.table || document.getElementById('summary');
+    if (!options.append) {
+        clearElement(table);
+    }
     
     // Filter entries that have JMeter results for the selected thread count
     const jmeterData = filtered_data.filter(e => getJmeterResult(e, selectors.thread) !== null);
@@ -1354,7 +1652,7 @@ function renderSummaryMultiThread(filtered_data) {
         td_name.className = 'summary-name';
         
         let link = document.createElement('a');
-        const displayName = `${elem.system} (${elem.cluster_size > 1 ? elem.cluster_size + '×' : ''}${elem.machine})`;
+        const displayName = getDisplayName(elem);
         link.appendChild(document.createTextNode(displayName));
         link.href = elem.github;
         link.style.color = `oklch(var(--hashed-link-lightness) 0.2018 ${nameToColor(elem.system.split(' ')[0])})`;
@@ -1408,18 +1706,22 @@ function renderSummaryMultiThread(filtered_data) {
 
 // Main render function
 function render() {
+    let summary = document.getElementById('summary');
     let details_head = document.getElementById('details_head');
     let details_body = document.getElementById('details_body');
     
+    clearElement(summary);
     clearElement(details_head);
     clearElement(details_body);
     
     // Filter data
     let filtered_data = processedData.filter(elem =>
-        selectors.benchmark === elem.benchmark &&
+        elem.page === pageMode &&
+        selectors.benchmark[elem.benchmark] &&
         selectors.scale[elem.scale] &&
         selectors.system[elem.system] &&
         selectors.machine[elem.machine] &&
+        selectors.version[getDisplayVersion(elem)] &&
         selectors.cluster[String(elem.cluster_size)]
     );
     
@@ -1433,6 +1735,8 @@ function render() {
             // For hot, cold, combined metrics, require non-empty query results
             filtered_data = filtered_data.filter(e => e.result && e.result.length > 0);
         }
+    } else {
+        filtered_data = filtered_data.filter(e => getJmeterResult(e, selectors.thread) !== null);
     }
     
     // Show/hide nothing selected message
@@ -1440,10 +1744,12 @@ function render() {
     if (filtered_data.length === 0) {
         nothing_selected.style.display = 'block';
         [...document.querySelectorAll('.comparison')].map(e => e.style.display = 'none');
+        setDetailedComparisonVisible(false);
         return;
     }
     nothing_selected.style.display = 'none';
-    [...document.querySelectorAll('.comparison')].map(e => e.style.display = 'block');
+    document.getElementById('summary-title').style.display = 'block';
+    document.getElementById('summary-comparison').style.display = 'table';
     
     // Initialize query checkboxes for single thread mode
     if (selectors.thread === 1) {
@@ -1466,22 +1772,49 @@ function render() {
             }
         });
     }
+
+    const benchmarkScaleGroups = getBenchmarkScaleGroups(filtered_data);
+    const showDetailedComparison = benchmarkScaleGroups.length === 1;
+    let detailGroupData = null;
+    let sorted_indices = [];
+    let baseline_data = [];
     
     // Render based on thread selection
-    let sorted_indices, baseline_data;
     if (selectors.thread === 1) {
-        [sorted_indices, baseline_data] = renderSummarySingleThread(filtered_data);
         document.getElementById('better-direction').textContent = 'lower is better';
-        renderDetailsSingleThread(filtered_data, sorted_indices, baseline_data);
+
+        benchmarkScaleGroups.forEach(group => {
+            appendSummaryGroupHeader(summary, group);
+            [sorted_indices, baseline_data] = renderSummarySingleThread(group.entries, { table: summary, append: true });
+            if (showDetailedComparison) {
+                detailGroupData = group.entries;
+            }
+        });
+
+        if (showDetailedComparison && detailGroupData) {
+            renderDetailsSingleThread(detailGroupData, sorted_indices, baseline_data);
+        }
     } else {
-        [sorted_indices, baseline_data] = renderSummaryMultiThread(filtered_data);
         if (selectors.metric === 'qps' || selectors.metric === 'succ-qps') {
             document.getElementById('better-direction').textContent = 'higher is better';
         } else {
             document.getElementById('better-direction').textContent = 'lower is better';
         }
-        renderDetailsMultiThread(filtered_data, sorted_indices);
+
+        benchmarkScaleGroups.forEach(group => {
+            appendSummaryGroupHeader(summary, group);
+            [sorted_indices] = renderSummaryMultiThread(group.entries, { table: summary, append: true });
+            if (showDetailedComparison) {
+                detailGroupData = group.entries;
+            }
+        });
+
+        if (showDetailedComparison && detailGroupData) {
+            renderDetailsMultiThread(detailGroupData, sorted_indices);
+        }
     }
+
+    setDetailedComparisonVisible(showDetailedComparison);
     
     document.getElementById("scale_hint").textContent = 'Different colors represent values at different scales (1x, 10x, 100x zoom)';
 }
@@ -1510,7 +1843,7 @@ function renderDetailsSingleThread(filtered_data, sorted_indices, baseline_data)
     sorted_indices.forEach(idx => {
         const elem = filtered_data[idx];
         let th = document.createElement('th');
-        th.appendChild(document.createTextNode(`${elem.system}\n(${elem.cluster_size > 1 ? elem.cluster_size + '×' : ''}${elem.machine})`));
+        th.appendChild(document.createTextNode(getDisplayName(elem, true)));
         th.className = 'th-entry';
         th.dataset.system = elem.system;
         details_head.appendChild(th);
@@ -1687,7 +2020,7 @@ function renderDetailsMultiThread(filtered_data, sorted_indices) {
     
     sortedData.forEach(elem => {
         let th = document.createElement('th');
-        th.appendChild(document.createTextNode(`${elem.system}\n(${elem.cluster_size > 1 ? elem.cluster_size + '×' : ''}${elem.machine})`));
+        th.appendChild(document.createTextNode(getDisplayName(elem, true)));
         th.className = 'th-entry';
         th.dataset.system = elem.system;
         details_head.appendChild(th);

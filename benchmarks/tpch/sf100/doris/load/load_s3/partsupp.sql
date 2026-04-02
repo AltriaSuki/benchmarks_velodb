@@ -4,7 +4,8 @@ LOAD LABEL partsupp_${TIMESTAMP}
     INTO TABLE partsupp
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
-    (ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment)
+    (ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment, ps_dummy)
+    PROPERTIES('skip_lines' = '0')
 )
 WITH S3
 (
@@ -15,6 +16,6 @@ WITH S3
 PROPERTIES
 (
     "timeout" = "36000",
-    "load_parallelism" = "8",
+
     "max_filter_ratio" = "0.1"
 );

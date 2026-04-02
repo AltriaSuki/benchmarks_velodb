@@ -4,7 +4,8 @@ LOAD LABEL supplier_${TIMESTAMP}
     INTO TABLE supplier
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
-    (s_suppkey, s_name, s_address, s_nationkey, s_phone, s_acctbal, s_comment)
+    (s_suppkey, s_name, s_address, s_nationkey, s_phone, s_acctbal, s_comment, s_dummy)
+    PROPERTIES('skip_lines' = '0')
 )
 WITH S3
 (
@@ -15,6 +16,6 @@ WITH S3
 PROPERTIES
 (
     "timeout" = "36000",
-    "load_parallelism" = "8",
+
     "max_filter_ratio" = "0.1"
 );

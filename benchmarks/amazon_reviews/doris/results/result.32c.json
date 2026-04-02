@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "system": "doris",
+    "system": "Apache Doris",
     "version": "",
     "create_time": "2026-02-10",
     "machine": "aws.32c.256GB",
