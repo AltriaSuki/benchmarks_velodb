@@ -1,6 +1,6 @@
 LOAD LABEL customer_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/customer/customer_[0-9]*.dat.gz")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/customer_[0-9]*.dat")
     INTO TABLE customer
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

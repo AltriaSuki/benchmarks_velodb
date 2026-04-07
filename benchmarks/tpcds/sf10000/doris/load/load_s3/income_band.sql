@@ -1,6 +1,6 @@
 LOAD LABEL income_band_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/income_band/income_band*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/income_band*.*")
     INTO TABLE income_band
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

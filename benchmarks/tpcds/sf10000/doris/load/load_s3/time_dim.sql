@@ -1,6 +1,6 @@
 LOAD LABEL time_dim_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/time_dim/time_dim*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/time_dim*.*")
     INTO TABLE time_dim
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

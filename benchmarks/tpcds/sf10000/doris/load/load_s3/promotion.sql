@@ -1,6 +1,6 @@
 LOAD LABEL promotion_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/promotion/promotion*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/promotion*.*")
     INTO TABLE promotion
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

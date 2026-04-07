@@ -1,6 +1,6 @@
 LOAD LABEL ship_mode_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/ship_mode/ship_mode*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/ship_mode*.*")
     INTO TABLE ship_mode
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

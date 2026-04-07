@@ -1,6 +1,6 @@
 LOAD LABEL household_demographics_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/household_demographics/household_demographics*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/household_demographics*.*")
     INTO TABLE household_demographics
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

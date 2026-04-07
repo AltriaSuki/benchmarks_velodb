@@ -100,7 +100,7 @@ create table catalog_sales
 (
     cs_sold_date_sk           integer                       ,
     cs_item_sk                integer               not null,
-    cs_order_number           BIGINT               not null,
+    cs_order_number           integer               not null,
     cs_sold_time_sk           integer                       ,
     cs_ship_date_sk           integer                       ,
     cs_bill_customer_sk       integer                       ,
@@ -550,7 +550,7 @@ create table web_sales
 (
     ws_sold_date_sk           integer                       ,
     ws_item_sk                integer               not null,
-    ws_order_number           BIGINT               not null,
+    ws_order_number           integer               not null,
     ws_sold_time_sk           integer                       ,
     ws_ship_date_sk           integer                       ,
     ws_bill_customer_sk       integer                       ,

@@ -1,6 +1,6 @@
 LOAD LABEL catalog_sales_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/catalog_sales/catalog_sales*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/catalog_sales*.*")
     INTO TABLE catalog_sales
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

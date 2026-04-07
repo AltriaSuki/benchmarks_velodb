@@ -1,6 +1,6 @@
 LOAD LABEL web_site_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/web_site/web_site*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/web_site*.*")
     INTO TABLE web_site
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"

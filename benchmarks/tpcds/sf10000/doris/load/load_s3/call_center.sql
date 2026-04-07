@@ -1,6 +1,6 @@
 LOAD LABEL call_center_${TIMESTAMP}
 (
-    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/call_center/call_center*.*")
+    DATA INFILE("s3://${STORAGE_BUCKET}/tpcds/sf10000/call_center*.*")
     INTO TABLE call_center
     COLUMNS TERMINATED BY "|"
     FORMAT AS "csv"
