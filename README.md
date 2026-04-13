@@ -11,7 +11,7 @@ For a long time, database benchmarking has been dominated by organizations like 
 
 Inspired by the rise of open-source databases and modern platforms like [ClickBench](https://benchmark.clickhouse.com/) and [db-benchmarks](https://db-benchmarks.com/), this project aims to embrace a new paradigm centered on openness, continuous integration, and reproducibility.
 
-Our goal is to build `benchmarks.velodb.com` into the industry's most trusted and impartial resource for performance evaluation. Every architectural decision for the platform is measured by whether it enhances transparency, reproducibility, and fairness.
+Our goal is to build `velodb.github.io/benchmarks` into the industry's most trusted and impartial resource for performance evaluation. Every architectural decision for the platform is measured by whether it enhances transparency, reproducibility, and fairness.
 
 ## Core Principles
 
