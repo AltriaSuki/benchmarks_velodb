@@ -3,7 +3,7 @@
         "system": "Trino(Iceberg ORC)",
         "version": "479",
         "create_time": "2025-12-18",
-        "machine": "32C(aliyun)",
+        "machine": "32C(Alibaba Cloud)",
         "cluster_size": 3,
         "tags": [
             "benchmark",

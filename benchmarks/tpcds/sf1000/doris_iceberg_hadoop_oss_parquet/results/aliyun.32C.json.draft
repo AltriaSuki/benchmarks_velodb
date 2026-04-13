@@ -3,7 +3,7 @@
         "system": "Apache Doris(Iceberg Hadoop OSS Parquet)",
         "version": "4.0.1-rc02",
         "create_time": "2025-11-20",
-        "machine": "32C(aliyun)",
+        "machine": "32C(Alibaba Cloud)",
         "comment": "max_external_file_meta_cache_num=100000",
         "cluster_size": 3,
         "tags": [

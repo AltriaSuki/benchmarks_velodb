@@ -34,3 +34,5 @@ storage:
   endpoint: "${STORAGE_ENDPOINT:-https://s3.us-east-1.amazonaws.com}"
   region: "${STORAGE_REGION:-us-east-1}"
   bucket: "${STORAGE_BUCKET:-bench-dataset}"
+  access_key: "${STORAGE_ACCESS_KEY:-xxx}"
+  secret_key: "${STORAGE_SECRET_KEY:-xxx}"

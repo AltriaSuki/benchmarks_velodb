@@ -266,10 +266,10 @@ CREATE CATALOG `iceberg_nessie` PROPERTIES (
     "warehouse" = "warehouse",
     "uri" = "http://172.20.48.9:19120/iceberg",
     "type" = "iceberg",
-    "s3.secret_key" = "*XXX",
+    "s3.secret_key" = "${STORAGE_SECRET_KEY}",
     "s3.region" = "cn-beijing",
     "s3.endpoint" = "http://oss-cn-beijing-internal.aliyuncs.com",
-    "s3.access_key" = "*XXX",
+    "s3.access_key" = "${STORAGE_ACCESS_KEY}",
     "iceberg.catalog.type" = "rest"
 );
 ```
@@ -414,7 +414,7 @@ Each test result object contains the following fields:
       "system": "Apache Doris",
       "version": "4.0.2-rc02-30d2df0459",
       "create_time": "2025-12-22",
-      "machine": "32C(aliyun)",
+      "machine": "32C(Alibaba Cloud)",
       "cluster_size": 3,
       "tags": [
          "benchmark",

@@ -3,7 +3,7 @@
         "system": "Apache Doris",
         "version": "4.0.3-rc01-3cac2e8795",
         "create_time": "2026-01-25",
-        "machine": "32C(aliyun)",
+        "machine": "32C(Alibaba Cloud)",
         "cluster_size": 4,
         "tags": [
             "benchmark",

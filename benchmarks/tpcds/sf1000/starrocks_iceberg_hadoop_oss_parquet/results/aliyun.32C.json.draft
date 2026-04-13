@@ -3,7 +3,7 @@
         "system": "StarRocks(Iceberg Hadoop OSS Parquet)",
         "version": "4.0.0",
         "create_time": "2025-11-10",
-        "machine": "32C(aliyun)",
+        "machine": "32C(Alibaba Cloud)",
         "cluster_size": 3,
         "comment": "disable enable_scan_datacach, enable_file_pagecache",
         "tags": [

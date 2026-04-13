@@ -3,7 +3,7 @@
     "system": "Apache Doris",
     "version": "4.0.4-rc01-d74dc1fb93",
     "create_time": "2026-03-28",
-    "machine": "32C(aliyun.ecs.g9i.8xlarge)",
+    "machine": "32C(Alibaba Cloud.ecs.g9i.8xlarge)",
     "suite": "tpch",
     "scale": "sf1000",
     "cluster_size": 3,

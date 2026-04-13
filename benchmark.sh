@@ -657,7 +657,7 @@ run_query() {
                     fi
                 fi
             else
-                times_result+=",null"
+                times_result+=",9999"
                 echo "Query execution failed ${query_name} on run $t" >&2
             fi
         done

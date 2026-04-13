@@ -3,7 +3,7 @@
         "system": "Trino(Iceberg Parquet)",
         "version": "479",
         "create_time": "2025-12-18",
-        "machine": "32C(aliyun)",
+        "machine": "32C(Alibaba Cloud)",
         "cluster_size": 3,
         "tags": [
             "benchmark",
@@ -28,9 +28,9 @@
                     14.226
                 ],
                 "q3": [
-                    null,
-                    null,
-                    null
+                    9999,
+                    9999,
+                    9999
                 ],
                 "q4": [
                     31.928,
@@ -38,9 +38,9 @@
                     30.187
                 ],
                 "q5": [
-                    null,
-                    null,
-                    null
+                    9999,
+                    9999,
+                    9999
                 ],
                 "q6": [
                     9.293,
@@ -103,9 +103,9 @@
                     88.473
                 ],
                 "q18": [
-                    null,
-                    null,
-                    null
+                    9999,
+                    9999,
+                    9999
                 ],
                 "q19": [
                     20.432,
@@ -118,9 +118,9 @@
                     27.355
                 ],
                 "q21": [
-                    null,
-                    null,
-                    null
+                    9999,
+                    9999,
+                    9999
                 ],
                 "q22": [
                     13.479,

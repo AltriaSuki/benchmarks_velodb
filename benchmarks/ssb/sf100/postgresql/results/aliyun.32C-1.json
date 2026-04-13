@@ -3,7 +3,7 @@
     "system": "PostgreSQL",
     "version": "18.1",
     "create_time": "2026-1-24",
-    "machine": "1 * 32C(aliyun)",
+    "machine": "1 * 32C(Alibaba Cloud)",
     "benchmark": "ssb",
     "scale": "sf100",
     "cluster_size": 1,

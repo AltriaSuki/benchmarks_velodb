@@ -10,7 +10,7 @@ engine:
     user: "${DB_USER:-root}" # Doris username
     password: "${PASSWORD:-}" # Doris password
     catalog: "${CATALOG:-iceberg_nessie}" # Doris catalog name
-    db: "${DB:-tpch_sf1000_parquet}" # Doris database name
+    db: "tpch_sf1000_parquet" # Doris database name
 
 # JMeter test execution parameters
 parameters:
@@ -33,3 +33,5 @@ storage:
   endpoint: "${STORAGE_ENDPOINT:-https://s3.us-east-1.amazonaws.com}"
   region: "${STORAGE_REGION:-us-east-1}"
   bucket: "${STORAGE_BUCKET:-bench-dataset}"
+  access_key: "${STORAGE_ACCESS_KEY:-xxx}"
+  secret_key: "${STORAGE_SECRET_KEY:-xxx}"
