@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](./LICENSE)
 
-**[benchmarks.velodb.com](https://benchmarks.velodb.com)**
+**[velodb.github.io/benchmarks](https://velodb.github.io/benchmarks)**
 An open, reproducible, and community-driven database benchmark project.
 
 ---
