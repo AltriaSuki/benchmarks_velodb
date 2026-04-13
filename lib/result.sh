@@ -174,6 +174,11 @@ generate_result() {
         echo "ERROR: Generated JSON is invalid, falling back to basic structure" >&2
         generate_basic_report "$result_json" "$create_time"
     fi
+
+    # Sync to latest result for fixed-path access
+    local latest_result="$(dirname "$RESULT_DIR")/result.json"
+    cp "$result_json" "$latest_result"
+    echo "Latest result synced to: $latest_result"
 }
 
 # Generate basic report structure when detailed processing fails
