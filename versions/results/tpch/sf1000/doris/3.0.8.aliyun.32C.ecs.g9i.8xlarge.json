@@ -1,7 +1,7 @@
 {
   "metadata": {
     "system": "Apache Doris",
-    "version": "3.0.8-rc01-09b0cc49a6",
+    "version": "3.0.8",
     "create_time": "2026-03-28",
     "machine": "32C(Alibaba Cloud.ecs.g9i.8xlarge)",
     "suite": "tpch",

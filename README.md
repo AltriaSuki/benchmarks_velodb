@@ -412,7 +412,7 @@ Each test result object contains the following fields:
 {
    "metadata": {
       "system": "Apache Doris",
-      "version": "4.0.2-rc02-30d2df0459",
+      "version": "4.0.2",
       "create_time": "2025-12-22",
       "machine": "32C(Alibaba Cloud)",
       "cluster_size": 3,
