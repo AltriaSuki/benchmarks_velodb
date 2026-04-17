@@ -42,3 +42,5 @@ storage:
   bucket: "${STORAGE_BUCKET:-bench-dataset}"
   access_key: "${STORAGE_ACCESS_KEY:-xxx}"
   secret_key: "${STORAGE_SECRET_KEY:-xxx}"
+tables:
+  lineorder_flat: 5999989709

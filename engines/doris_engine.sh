@@ -142,10 +142,23 @@ engine_get_table_rows() {
     local host="${fe_host:-127.0.0.1}"
     local port="${fe_query_port:-9030}"
     local sys_user="${user:-root}"
+    local current_db="${db:-}"
+    local qualified_table="$table"
+
+    if [ -n "${catalog:-}" ] && [ -n "$current_db" ]; then
+        current_db="${catalog}.${current_db}"
+    fi
+
+    # Support bare table names in benchmark.yaml tables config when a catalog
+    # is configured, while still allowing callers to pass db.table or
+    # catalog.db.table explicitly.
+    if [[ "$qualified_table" != *.* ]] && [ -n "${catalog:-}" ] && [ -n "${db:-}" ]; then
+        qualified_table="${catalog}.${db}.${qualified_table}"
+    fi
 
     # Do not use `export MYSQL_PWD` to avoid environment pollution
-    MYSQL_PWD="${password:-}" mysql -h"${host}" -P"${port}" -u"${sys_user}" "${db}" \
-        -N -s -e "SELECT COUNT(*) FROM ${table};" 2>/dev/null || echo "0"
+    MYSQL_PWD="${password:-}" mysql -h"${host}" -P"${port}" -u"${sys_user}" "${current_db}" \
+        -N -s -e "SELECT COUNT(*) FROM ${qualified_table};" 2>/dev/null || echo "0"
 
     return 0
 }
@@ -396,4 +409,3 @@ engine_load_data() {
         return 1
     fi
 }
-

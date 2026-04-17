@@ -81,7 +81,7 @@ generate_result() {
     # Get sorted query keys using version sort
     local sorted_keys_json
     if [ -f "$statistics_json" ]; then
-        sorted_keys_json=$(jq -r --argjson stats "$statistics_content" '$stats | to_entries | map(select(.key | test("^(flat_|ssb-|tpch-)?q[0-9]+\\.[0-9]+$|^q[0-9]+$")) | .key) | .[]' <<< 'null' | sort -V | jq -R -s -c 'split("\n") | map(select(length > 0))')
+        sorted_keys_json=$(jq -r --argjson stats "$statistics_content" '$stats | to_entries | map(select(.key != "Total") | .key) | .[]' <<< 'null' | sort -V | jq -R -s -c 'split("\n") | map(select(length > 0))')
     else
         sorted_keys_json="[]"
     fi
@@ -133,7 +133,7 @@ generate_result() {
             queries: (
               # Create a lookup map for all query data
               ($stats | to_entries | map(
-                select(.key | test("^(flat_|ssb-|tpch-)?q[0-9]+\\.[0-9]+$|^q[0-9]+$")) |
+                select(.key != "Total") |
                 {
                   key: .key,
                   value: {

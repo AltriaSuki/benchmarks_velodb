@@ -523,6 +523,10 @@ run_query() {
     if [[ "$query_dir" != /* ]]; then
         query_dir="$TEST_ROOT/$query_dir"
     fi
+    query_dir="${query_dir%/}"
+    if [ -z "$query_dir" ]; then
+        query_dir="/"
+    fi
 
     if [ ! -d "$query_dir" ]; then
         echo "Query directory not found: $query_dir, skipping"
@@ -530,23 +534,20 @@ run_query() {
     fi
 
     echo "Processing queries from $(basename "$query_dir")..."
-    # Process all SQL files in directory (sorted numerically)
+    # Process all SQL files under query_dir recursively (sorted numerically)
     while IFS= read -r -d '' query_file; do
         if [ ! -f "$query_file" ]; then
             continue
         fi
 
-        local query_name prefix
-        query_name=$(basename "$query_file" .sql)
-
-        # Add prefix based on directory name for organization
-        local dir_name
-        dir_name=$(basename "$query_dir")
-        if [ "$dir_name" != "query" ] && [ "$dir_name" != "." ]; then
-            prefix="${dir_name}_"
-        else
-            prefix=""
+        # Use the path relative to query_dir as the query name so nested
+        # directories become part of the identifier, e.g. agg/q1.sql -> agg/q1.
+        local query_name relative_path
+        relative_path="${query_file#$query_dir/}"
+        if [ "$relative_path" = "$query_file" ]; then
+            relative_path=$(basename "$query_file")
         fi
+        query_name="${relative_path%.sql}"
 
         if [ "$QUERY_MODE" = "line" ]; then
             # Line-based mode: each line is a separate query
@@ -557,7 +558,7 @@ run_query() {
                     continue
                 fi
 
-                local full_query_name="${prefix}q${query_counter}"
+                local full_query_name="${query_name}_q${query_counter}"
                 # Add to queries array: query_name and sql_content separately
                 all_query_names+=("$full_query_name")
                 all_query_sqls+=("$(printf '%s' "$line" | envsubst)")
@@ -566,7 +567,7 @@ run_query() {
             done < "$query_file"
         else
             # File-based mode: entire file is one query (default behavior)
-            local full_query_name="${prefix}${query_name}"
+            local full_query_name="${query_name}"
 
             # Read and escape SQL content
             local sql_content
@@ -576,7 +577,7 @@ run_query() {
             all_query_names+=("$full_query_name")
             all_query_sqls+=("$sql_content")
         fi
-    done < <(find "$query_dir" -maxdepth 1 -name "*.sql" -type f -print0 | sort -zV)
+    done < <(find "$query_dir" -name "*.sql" -type f -print0 | sort -zV)
     
     
 
