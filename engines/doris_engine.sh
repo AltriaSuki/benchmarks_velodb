@@ -137,6 +137,90 @@ engine_run_sql() {
     fi
 }
 
+engine_set_auto_analyze() {
+    local enabled="$1"
+    local value="false"
+    if [ "$enabled" = "true" ]; then
+        value="true"
+    fi
+
+    export MYSQL_PWD="${password:-}"
+    mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -e "set global enable_auto_analyze=${value};" >/dev/null 2>&1
+}
+
+engine_list_tables() {
+    local db_name="$1"
+    local args=(-h"$fe_host" -P"$fe_query_port" -u"$user" -N -s)
+
+    if [ -n "${catalog:-}" ]; then
+        db_name="${catalog}.${db_name}"
+    fi
+    [ -n "$db_name" ] && args+=(-D"$db_name")
+
+    export MYSQL_PWD="${password:-}"
+    mysql "${args[@]}" -e "SHOW TABLES;" 2>/dev/null
+}
+
+engine_drop_stats() {
+    local db_name="$1"
+    local table="$2"
+    local args=(-h"$fe_host" -P"$fe_query_port" -u"$user")
+
+    if [ -n "${catalog:-}" ]; then
+        db_name="${catalog}.${db_name}"
+    fi
+    [ -n "$db_name" ] && args+=(-D"$db_name")
+
+    export MYSQL_PWD="${password:-}"
+    mysql "${args[@]}" -e "DROP STATS ${table};" >/dev/null 2>&1
+}
+
+engine_analyze_table() {
+    local db_name="$1"
+    local table="$2"
+    local analyze_type="$3"
+    local args=(-h"$fe_host" -P"$fe_query_port" -u"$user")
+    local sql=""
+
+    if [ -n "${catalog:-}" ]; then
+        db_name="${catalog}.${db_name}"
+    fi
+    [ -n "$db_name" ] && args+=(-D"$db_name")
+
+    case "${analyze_type}" in
+        fullAnalyze)
+            sql="analyze table ${table} with sync"
+        ;;
+        sampleAnalyze)
+            sql="analyze table ${table} WITH SAMPLE ROWS 4000000 with sync"
+        ;;
+        noAnalyze|defaultAnalyze)
+            return 0
+        ;;
+        *)
+            echo "Unsupported analyze type for Doris: ${analyze_type}" >&2
+            return 1
+        ;;
+    esac
+
+    export MYSQL_PWD="${password:-}"
+    mysql "${args[@]}" -e "${sql};" 2>&1
+}
+
+engine_show_column_stats() {
+    local db_name="$1"
+    local table="$2"
+    local args=(-h"$fe_host" -P"$fe_query_port" -u"$user")
+
+    if [ -n "${catalog:-}" ]; then
+        db_name="${catalog}.${db_name}"
+    fi
+    [ -n "$db_name" ] && args+=(-D"$db_name")
+
+    export MYSQL_PWD="${password:-}"
+    mysql "${args[@]}" -e "show column stats ${table};" >/dev/null 2>&1
+}
+
 engine_get_table_rows() {
     local table="$1"
     local host="${fe_host:-127.0.0.1}"

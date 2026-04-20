@@ -697,16 +697,57 @@ run_query() {
 
 
 run_analyze() {
-    echo "Running analysis..."
-    local analyze_sql="${ANALYZE_FILE:-analyze/analyze.sql}"
-
-    if [ -z "$analyze_sql" ] || [ "$analyze_sql" = "null" ]; then
-        echo "No analysis SQL provided, skipping"
+    if run_builtin_analyze; then
         return 0
     fi
 
+    local builtin_rc=$?
+    if [ "$builtin_rc" -eq 2 ]; then
+        echo "Built-in analyze is unavailable for this engine, fallback to analyze SQL file."
+        if run_analyze_with_sql_file; then
+            return 0
+        fi
+        die "Analysis failed: built-in analyze unavailable and SQL-file fallback failed"
+    fi
+
+    die "Built-in analysis failed"
+}
+
+normalize_analyze_type() {
+    local raw_type="$1"
+    local lower_type
+    lower_type="$(echo "$raw_type" | tr '[:upper:]' '[:lower:]')"
+    case "$lower_type" in
+        ""|sample|sampleanalyze|simple|simpleanalyze)
+            echo "sampleAnalyze"
+        ;;
+        full|fullanalyze)
+            echo "fullAnalyze"
+        ;;
+        default|defaultanalyze|auto)
+            echo "defaultAnalyze"
+        ;;
+        none|no|noanalyze)
+            echo "noAnalyze"
+        ;;
+        *)
+            echo "$raw_type"
+        ;;
+    esac
+}
+
+run_analyze_with_sql_file() {
+    echo "Running analysis with SQL file..."
+    local analyze_sql="${ANALYZE_FILE:-analyze/analyze.sql}"
+
+    if [ -z "$analyze_sql" ] || [ "$analyze_sql" = "null" ]; then
+        echo "No analysis SQL file configured"
+        return 2
+    fi
+
     if [[ "$analyze_sql" == *'${'* ]]; then
-        die "Unresolved variable in analyze path: $analyze_sql"
+        echo "Unresolved variable in analyze path: $analyze_sql" >&2
+        return 1
     fi
 
     if [[ "$analyze_sql" != /* ]]; then
@@ -714,7 +755,8 @@ run_analyze() {
     fi
 
     if [ ! -f "$analyze_sql" ]; then
-        die "Analysis SQL file not found: $analyze_sql"
+        echo "Analysis SQL file not found: $analyze_sql" >&2
+        return 2
     fi
 
     local tmp_sql
@@ -730,17 +772,144 @@ run_analyze() {
         end_time=$(date +%s%3N)
         local duration
         duration=$(echo "scale=3; ($end_time - $start_time) / 1000" | bc)
-        
-        # Save to analyze.csv
+
         echo "step,duration_seconds" > "$RESULT_DIR/analyze.csv"
         echo "analyze,$duration" >> "$RESULT_DIR/analyze.csv"
-        
+
         rm -f "$tmp_sql"
         echo "Analysis completed in ${duration}s"
-    else
-        rm -f "$tmp_sql"
-        die "Analysis failed"
+        return 0
     fi
+
+    rm -f "$tmp_sql"
+    echo "Analysis SQL execution failed" >&2
+    return 1
+}
+
+run_builtin_analyze() {
+    local target_db="${db:-}"
+    if [ -z "$target_db" ]; then
+        echo "Database is empty, cannot run built-in analyze" >&2
+        return 1
+    fi
+
+    local engine_type_lower
+    engine_type_lower="$(echo "${ENGINE_TYPE:-}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$engine_type_lower" != "doris" && "$engine_type_lower" != "starrocks" ]]; then
+        echo "Built-in analyze is supported only for doris/starrocks, current engine: ${ENGINE_TYPE}" >&2
+        return 2
+    fi
+
+    local tables_output
+    if ! tables_output=$(engine_list_tables "$target_db" 2>&1); then
+        if [[ "$tables_output" == *"not supported"* ]]; then
+            return 2
+        fi
+        echo "$tables_output" >&2
+        return 1
+    fi
+
+    mapfile -t tables < <(printf '%s\n' "$tables_output" | awk 'NF > 0')
+
+    local normalized_type
+    normalized_type="$(normalize_analyze_type "${analyze_type:-${ANALYZE_TYPE:-sampleAnalyze}}")"
+    local analyze_csv="$RESULT_DIR/analyze.csv"
+
+    echo "Running built-in analysis (type: ${normalized_type})..."
+    echo "step,duration_seconds" > "$analyze_csv"
+
+    case "$normalized_type" in
+        defaultAnalyze)
+            local auto_output
+            if ! auto_output=$(engine_set_auto_analyze "true" 2>&1); then
+                if [[ "$auto_output" == *"not supported"* ]]; then
+                    return 2
+                fi
+                echo "$auto_output" >&2
+                return 1
+            fi
+
+            echo "default analyze wait 10 min"
+            sleep 600
+        ;;
+        fullAnalyze|sampleAnalyze)
+            local disable_output
+            if ! disable_output=$(engine_set_auto_analyze "false" 2>&1); then
+                if [[ "$disable_output" == *"not supported"* ]]; then
+                    return 2
+                fi
+                echo "$disable_output" >&2
+                return 1
+            fi
+
+            sleep 60
+
+            local table
+            for table in "${tables[@]}"; do
+                local drop_output
+                if ! drop_output=$(engine_drop_stats "$target_db" "$table" 2>&1); then
+                    if [[ "$drop_output" != *"not supported"* ]]; then
+                        echo "$drop_output" >&2
+                        return 1
+                    fi
+                fi
+
+                local start_time end_time duration
+                start_time=$(date +%s%3N)
+
+                local analyze_output
+                if ! analyze_output=$(engine_analyze_table "$target_db" "$table" "$normalized_type" 2>&1); then
+                    if [[ "$analyze_output" == *"Analyze view is not allowed"* ]]; then
+                        echo "Skip analyze view entry: ${table}"
+                        continue
+                    fi
+                    echo "$analyze_output" >&2
+                    return 1
+                fi
+
+                end_time=$(date +%s%3N)
+                duration=$(echo "scale=3; ($end_time - $start_time) / 1000" | bc)
+                echo "${table},${duration}" >> "$analyze_csv"
+                echo "Analyze table ${table} completed in ${duration}s"
+            done
+        ;;
+        noAnalyze)
+            local disable_output
+            if ! disable_output=$(engine_set_auto_analyze "false" 2>&1); then
+                if [[ "$disable_output" == *"not supported"* ]]; then
+                    return 2
+                fi
+                echo "$disable_output" >&2
+                return 1
+            fi
+
+            local table
+            for table in "${tables[@]}"; do
+                local drop_output
+                if ! drop_output=$(engine_drop_stats "$target_db" "$table" 2>&1); then
+                    if [[ "$drop_output" != *"not supported"* ]]; then
+                        echo "$drop_output" >&2
+                        return 1
+                    fi
+                fi
+            done
+        ;;
+        *)
+            echo "analyze type [${normalized_type}] error format" >&2
+        ;;
+    esac
+
+    if [ "$engine_type_lower" = "doris" ]; then
+        local table
+        for table in "${tables[@]}"; do
+            local stats_output
+            if ! stats_output=$(engine_show_column_stats "$target_db" "$table" 2>&1); then
+                echo "Column stats unavailable for ${table}: ${stats_output}" >&2
+            fi
+        done
+    fi
+
+    return 0
 }
 
 
@@ -835,6 +1004,7 @@ main() {
     session="${session:-false}"
     load="${load:-false}"
     analyze="${analyze:-false}"
+    analyze_type="${analyze_type:-${ANALYZE_TYPE:-sampleAnalyze}}"
     query="${query:-false}"
     query_times="${query_times:-1}"
     vectordbbench="${vectordbbench:-false}"

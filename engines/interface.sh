@@ -114,6 +114,42 @@ engine_drop_database() {
 engine_clean_trash() {
     return 0
 }
+
+# Optional built-in analyze hooks
+# - engine_set_auto_analyze(enabled): enabled=true/false
+engine_set_auto_analyze() {
+    echo "Analyze operations not supported by this engine, skipping..." >&2
+    return 1
+}
+
+# - engine_list_tables(db): print one table name per line
+engine_list_tables() {
+    local db="$1"
+    echo "Analyze operations not supported by this engine, skipping..." >&2
+    return 1
+}
+
+# - engine_drop_stats(db, table): drop existing stats for a table
+engine_drop_stats() {
+    local db="$1"
+    local table="$2"
+    echo "Analyze operations not supported by this engine, skipping..." >&2
+    return 1
+}
+
+# - engine_analyze_table(db, table, analyze_type): run analyze for one table
+engine_analyze_table() {
+    local db="$1"
+    local table="$2"
+    local analyze_type="$3"
+    echo "Analyze operations not supported by this engine, skipping..." >&2
+    return 1
+}
+
+# - engine_show_column_stats(db, table): optional diagnostics
+engine_show_column_stats() {
+    return 0
+}
 #
 # Optional helpers for query diagnostics (best-effort; used by query execution)
 # - engine_enable_profile(): enable query profiling if supported
