@@ -713,28 +713,6 @@ run_analyze() {
     die "Built-in analysis failed"
 }
 
-normalize_analyze_type() {
-    local raw_type="$1"
-    local lower_type
-    lower_type="$(echo "$raw_type" | tr '[:upper:]' '[:lower:]')"
-    case "$lower_type" in
-        ""|sample|sampleanalyze|simple|simpleanalyze)
-            echo "sampleAnalyze"
-        ;;
-        full|fullanalyze)
-            echo "fullAnalyze"
-        ;;
-        default|defaultanalyze|auto)
-            echo "defaultAnalyze"
-        ;;
-        none|no|noanalyze)
-            echo "noAnalyze"
-        ;;
-        *)
-            echo "$raw_type"
-        ;;
-    esac
-}
 
 run_analyze_with_sql_file() {
     echo "Running analysis with SQL file..."
@@ -811,15 +789,15 @@ run_builtin_analyze() {
 
     mapfile -t tables < <(printf '%s\n' "$tables_output" | awk 'NF > 0')
 
-    local normalized_type
-    normalized_type="$(normalize_analyze_type "${analyze_type:-${ANALYZE_TYPE:-sampleAnalyze}}")"
+    # Normalize analyze_type to lowercase for robust matching
+    analyze_type="$(echo "${analyze_type:-${ANALYZE_TYPE:-analyze_full}}" | tr '[:upper:]' '[:lower:]')"
     local analyze_csv="$RESULT_DIR/analyze.csv"
 
-    echo "Running built-in analysis (type: ${normalized_type})..."
+    echo "Running built-in analysis (type: ${analyze_type})..."
     echo "step,duration_seconds" > "$analyze_csv"
 
-    case "$normalized_type" in
-        defaultAnalyze)
+    case "$analyze_type" in
+        analyze_default)
             local auto_output
             if ! auto_output=$(engine_set_auto_analyze "true" 2>&1); then
                 if [[ "$auto_output" == *"not supported"* ]]; then
@@ -832,7 +810,7 @@ run_builtin_analyze() {
             echo "default analyze wait 10 min"
             sleep 600
         ;;
-        fullAnalyze|sampleAnalyze)
+        analyze_full|analyze_sample)
             local disable_output
             if ! disable_output=$(engine_set_auto_analyze "false" 2>&1); then
                 if [[ "$disable_output" == *"not supported"* ]]; then
@@ -858,7 +836,7 @@ run_builtin_analyze() {
                 start_time=$(date +%s%3N)
 
                 local analyze_output
-                if ! analyze_output=$(engine_analyze_table "$target_db" "$table" "$normalized_type" 2>&1); then
+                if ! analyze_output=$(engine_analyze_table "$target_db" "$table" "$analyze_type" 2>&1); then
                     if [[ "$analyze_output" == *"Analyze view is not allowed"* ]]; then
                         echo "Skip analyze view entry: ${table}"
                         continue
@@ -873,7 +851,7 @@ run_builtin_analyze() {
                 echo "Analyze table ${table} completed in ${duration}s"
             done
         ;;
-        noAnalyze)
+        analyze_no)
             local disable_output
             if ! disable_output=$(engine_set_auto_analyze "false" 2>&1); then
                 if [[ "$disable_output" == *"not supported"* ]]; then
@@ -895,7 +873,7 @@ run_builtin_analyze() {
             done
         ;;
         *)
-            echo "analyze type [${normalized_type}] error format" >&2
+            echo "analyze type [${analyze_type}] error format" >&2
         ;;
     esac
 
@@ -1004,7 +982,7 @@ main() {
     session="${session:-false}"
     load="${load:-false}"
     analyze="${analyze:-false}"
-    analyze_type="${analyze_type:-${ANALYZE_TYPE:-sampleAnalyze}}"
+    analyze_type="${analyze_type:-${ANALYZE_TYPE:-analyze_full}}"
     query="${query:-false}"
     query_times="${query_times:-1}"
     vectordbbench="${vectordbbench:-false}"

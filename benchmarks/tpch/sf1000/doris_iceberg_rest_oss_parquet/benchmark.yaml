@@ -14,6 +14,8 @@ engine:
 
 # JMeter test execution parameters
 parameters:
+  analyze: "${ANALYZE:-false}" # Whether to run analyze phase
+  analyze_type: "${ANALYZE_TYPE:-analyze_full}" # Type of built-in analyze (analyze_full, analyze_sample)
   load: "${LOAD:-false}" # Whether to run data loading phase
   query: "${QUERY:-false}" # Whether to run benchmark query
   query_times: "${QUERY_TIMES:-3}" # Number of times to run each query

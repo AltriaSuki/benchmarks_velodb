@@ -17,6 +17,7 @@ parameters:
   query: "${QUERY:-false}" # Whether to run benchmark query
   session: "${SESSION:-false}" # Whether to run session setup phase
   analyze: "${ANALYZE:-false}" # Whether to run analyze phase
+  analyze_type: "${ANALYZE_TYPE:-analyze_full}" # Type of built-in analyze (analyze_full, analyze_sample)
   query_times: "${QUERY_TIMES:-3}" # Number of times to run each query
   jmeter: "${JMETER:-false}" # Whether to run jmeter phase
   threads: "${JMETER_THREADS:-50}" # Number of JMeter threads

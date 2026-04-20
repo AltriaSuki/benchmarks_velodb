@@ -191,13 +191,13 @@ engine_analyze_table() {
     local sql=""
 
     case "${analyze_type}" in
-        fullAnalyze)
+        analyze_full)
             sql="analyze full table ${table} with sync mode"
         ;;
-        sampleAnalyze)
+        analyze_sample)
             sql="ANALYZE sample table ${table} with sync mode PROPERTIES('statistic_sample_collect_rows'='4000000')"
         ;;
-        noAnalyze|defaultAnalyze)
+        analyze_no|analyze_default)
             return 0
         ;;
         *)

@@ -188,13 +188,13 @@ engine_analyze_table() {
     [ -n "$db_name" ] && args+=(-D"$db_name")
 
     case "${analyze_type}" in
-        fullAnalyze)
+        analyze_full)
             sql="analyze table ${table} with sync"
         ;;
-        sampleAnalyze)
+        analyze_sample)
             sql="analyze table ${table} WITH SAMPLE ROWS 4000000 with sync"
         ;;
-        noAnalyze|defaultAnalyze)
+        analyze_no|analyze_default)
             return 0
         ;;
         *)
