@@ -108,6 +108,7 @@ engine_run_sql_file() {
 engine_run_sql() {
     local db="$1"
     local sql_statement="$2"
+    local capture_last_query_id="${3:-true}"
     
     if [ -z "$sql_statement" ]; then
         echo "ERROR: SQL statement cannot be empty" >&2
@@ -119,17 +120,24 @@ engine_run_sql() {
     
     # Build mysql command arguments
     local args=(-h"$fe_host" -P"$fe_query_port" -u"$user")
-    [ -n "${catalog:-}" ] && db="${catalog}.${db}"
+    [ -n "${catalog:-}" ] && [ -n "$db" ] && db="${catalog}.${db}"
     [ -n "$db" ] && args+=(-D"$db")
     
-    # Execute the SQL statement and select last_query_id() sequentially.
-    # Use --batch --skip-column-names to get clean output without headers,
-    # and keep stderr separate to avoid contaminating the query ID.
+    local mysql_sql="$sql_statement"
+    if [ "$capture_last_query_id" = "true" ]; then
+        local normalized_sql
+        normalized_sql=$(printf '%s' "$sql_statement" | sed -e ':trim' -e 's/[[:space:]]*$//' \
+            -e '/;$/ { s/;*$//; b trim; }')
+        mysql_sql="${normalized_sql}; select last_query_id();"
+    fi
+
     local last_query_id_file="${RESULT_DIR:-/tmp}/.last_query_id"
     if output=$(mysql "${args[@]}" --batch --skip-column-names \
-        -e "$sql_statement; select last_query_id();" 2>/dev/null); then
-        # The last non-empty line of stdout is the query ID
-        echo "$output" | tail -n 1 > "$last_query_id_file"
+        -e "$mysql_sql" 2>/dev/null); then
+        if [ "$capture_last_query_id" = "true" ]; then
+            # The last non-empty line of stdout is the query ID.
+            echo "$output" | tail -n 1 > "$last_query_id_file"
+        fi
         return 0
     else
         echo "ERROR: Failed to execute SQL statement: $sql_statement" >&2
