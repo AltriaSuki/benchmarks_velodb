@@ -515,6 +515,193 @@ run_check_rows() {
     check_end=$(date +%s%3N)
     echo "scale=3; ($check_end - $check_start) / 1000" | bc > "$RESULT_DIR/check_rows_time.txt"
 }
+
+BE_HOSTS_ARR=()
+
+parse_be_hosts() {
+    BE_HOSTS_ARR=()
+    local raw="${be_hosts:-}"
+    [ -z "$raw" ] && return 0
+    IFS=',' read -r -a BE_HOSTS_ARR <<< "$raw"
+    local i
+    for i in "${!BE_HOSTS_ARR[@]}"; do
+        BE_HOSTS_ARR[$i]="$(echo "${BE_HOSTS_ARR[$i]}" | xargs)"
+    done
+}
+
+any_clear_cache_enabled() {
+    [[ "${clear_file_cache:-false}" == "true" \
+    || "${clear_page_cache:-false}" == "true" \
+    || "${clear_sys_page_cache:-false}" == "true" ]]
+}
+
+should_clear_cache_for_run() {
+    local run_index="$1"
+    any_clear_cache_enabled || return 1
+    [[ "${clear_cache_scope:-cold}" == "every_run" ]] && return 0
+    [[ "$run_index" -eq 1 ]]
+}
+
+# Port of selectdb-qa ClearSystemPageCache:
+#   ssh root@<be> "echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null"
+clear_system_page_cache() {
+    local ssh_user="${clear_cache_ssh_user:-root}"
+    local be
+    for be in "${BE_HOSTS_ARR[@]}"; do
+        echo "[${be}] ssh drop_caches"
+        if ! ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+                "${ssh_user}@${be}" \
+                "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null"; then
+            echo "drop_caches failed on ${be}" >&2
+            return 1
+        fi
+    done
+    sleep 3
+    return 0
+}
+
+# Port of selectdb-qa ClearDorisPageCache:
+#   POST api/update_config?cache_periodic_prune_stale_sweep_sec=5
+#   POST api/update_config?disable_storage_page_cache=true   (wait 10s)
+#   POST api/update_config?disable_storage_page_cache=false  (wait 10s)
+clear_doris_page_cache() {
+    local port="${be_http_port:-8040}"
+    local be
+    for be in "${BE_HOSTS_ARR[@]}"; do
+        echo "[${be}] POST cache_periodic_prune_stale_sweep_sec=5"
+        if ! curl -fsS -X POST "http://${be}:${port}/api/update_config?cache_periodic_prune_stale_sweep_sec=5"; then
+            echo "update_config prune_sweep_sec failed on ${be}" >&2
+            return 1
+        fi
+        echo
+        echo "[${be}] POST disable_storage_page_cache=true"
+        if ! curl -fsS -X POST "http://${be}:${port}/api/update_config?disable_storage_page_cache=true"; then
+            echo "update_config disable=true failed on ${be}" >&2
+            return 1
+        fi
+        echo
+    done
+    echo "wait 10s"
+    sleep 10
+    for be in "${BE_HOSTS_ARR[@]}"; do
+        echo "[${be}] POST disable_storage_page_cache=false"
+        if ! curl -fsS -X POST "http://${be}:${port}/api/update_config?disable_storage_page_cache=false"; then
+            echo "update_config disable=false failed on ${be}" >&2
+            return 1
+        fi
+        echo
+    done
+    echo "wait 10s"
+    sleep 10
+    return 0
+}
+
+# Extract file_cache_cache_size values from brpc_metrics output (one per disk)
+_parse_file_cache_sizes() {
+    awk '/file_cache_cache_size/ && !/gauge/ && !/HELP/ {print $NF}'
+}
+
+# Port of selectdb-qa ClearDorisFileCache:
+#   GET api/file_cache?op=clear&sync=false on each BE
+#   sleep 60, then every 30s poll brpc_metrics until every disk on every BE
+#   has file_cache_cache_size < max_size_gb * 1GB; re-trigger clear on BEs
+#   still above threshold. Timeout after timeout_min minutes.
+clear_doris_file_cache() {
+    local http_port="${be_http_port:-8040}"
+    local brpc_port="${be_brpc_port:-8060}"
+    local max_gb="${clear_file_cache_max_size_gb:-2}"
+    local timeout_min="${clear_file_cache_timeout_min:-60}"
+    local max_bytes
+    max_bytes=$(awk -v g="$max_gb" 'BEGIN{printf "%.0f", g*1024*1024*1024}')
+    local be
+    for be in "${BE_HOSTS_ARR[@]}"; do
+        echo "[${be}] GET api/file_cache?op=clear&sync=false"
+        if ! curl -fsS "http://${be}:${http_port}/api/file_cache?op=clear&sync=false"; then
+            echo "clear file_cache failed on ${be}" >&2
+            return 1
+        fi
+        echo
+    done
+    echo "wait 60s for async clear"
+    sleep 60
+
+    local deadline
+    deadline=$(( $(date +%s) + timeout_min * 60 ))
+    while :; do
+        local all_below="true"
+        local need_reclear=()
+        for be in "${BE_HOSTS_ARR[@]}"; do
+            local metrics
+            if ! metrics=$(curl -fsS "http://${be}:${brpc_port}/brpc_metrics" 2>/dev/null); then
+                echo "[${be}] failed to fetch brpc_metrics" >&2
+                all_below="false"
+                continue
+            fi
+            local sizes
+            sizes=$(echo "$metrics" | _parse_file_cache_sizes)
+            if [ -z "$sizes" ]; then
+                echo "[${be}] file_cache_cache_size metric not found" >&2
+                all_below="false"
+                continue
+            fi
+            local node_below="true"
+            local idx=0
+            local size
+            while IFS= read -r size; do
+                idx=$((idx+1))
+                local gb
+                gb=$(awk -v s="$size" 'BEGIN{printf "%.2f", s/1024/1024/1024}')
+                echo "[${be}] disk ${idx} cache size: ${gb} GB"
+                if awk -v s="$size" -v m="$max_bytes" 'BEGIN{exit !(s>=m)}'; then
+                    node_below="false"
+                fi
+            done <<< "$sizes"
+            if [[ "$node_below" != "true" ]]; then
+                all_below="false"
+                need_reclear+=("$be")
+            fi
+        done
+
+        if [[ "$all_below" == "true" ]]; then
+            echo "all disks on all BEs below ${max_gb}GB"
+            return 0
+        fi
+
+        if [ "${#need_reclear[@]}" -gt 0 ]; then
+            echo "re-clearing BEs still above threshold: ${need_reclear[*]}"
+            for be in "${need_reclear[@]}"; do
+                echo "[${be}] GET api/file_cache?op=clear&sync=false (re-clear)"
+                curl -fsS "http://${be}:${http_port}/api/file_cache?op=clear&sync=false" || \
+                    echo "re-clear failed on ${be}" >&2
+                echo
+            done
+        fi
+
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "timeout waiting for file cache to drop below ${max_gb}GB" >&2
+            return 1
+        fi
+        sleep 30
+    done
+}
+
+run_clear_cache_actions() {
+    local query_name="$1"
+    local run_index="$2"
+    echo "Clearing cache before query ${query_name} run ${run_index}..."
+
+    if [[ "${clear_file_cache:-false}" == "true" ]]; then
+        clear_doris_file_cache || return 1
+    fi
+    if [[ "${clear_page_cache:-false}" == "true" ]]; then
+        clear_doris_page_cache || return 1
+    fi
+    if [[ "${clear_sys_page_cache:-false}" == "true" ]]; then
+        clear_system_page_cache || return 1
+    fi
+    return 0
+}
+
 # Run benchmark queries
 run_query() {
     local query_dir="${QUERY_DIR:-query/}"
@@ -642,6 +829,11 @@ run_query() {
 
         for ((t=1; t<=query_times; t++)); do
             echo "Query run ${query_name} on run $t"
+            if should_clear_cache_for_run "$t"; then
+                if ! run_clear_cache_actions "$query_name" "$t"; then
+                    die "Failed to clear cache before query ${query_name} run ${t}"
+                fi
+            fi
             local start_time
             start_time=$(date +%s%3N)
             if engine_run_sql "${db}" "$sql_content"; then
@@ -995,6 +1187,16 @@ main() {
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
     profile="${profile:-${PROFILE:-false}}"
     plan="${plan:-${PLAN:-false}}"
+    clear_file_cache="${clear_file_cache:-${CLEAR_FILE_CACHE:-false}}"
+    clear_page_cache="${clear_page_cache:-${CLEAR_PAGE_CACHE:-false}}"
+    clear_sys_page_cache="${clear_sys_page_cache:-${CLEAR_SYS_PAGE_CACHE:-false}}"
+    clear_cache_scope="${clear_cache_scope:-${CLEAR_CACHE_SCOPE:-cold}}"
+    be_hosts="${be_hosts:-${BE_HOSTS:-}}"
+    be_http_port="${be_http_port:-${BE_HTTP_PORT:-8040}}"
+    be_brpc_port="${be_brpc_port:-${BE_BRPC_PORT:-8060}}"
+    clear_file_cache_max_size_gb="${clear_file_cache_max_size_gb:-${CLEAR_FILE_CACHE_MAX_SIZE_GB:-2}}"
+    clear_file_cache_timeout_min="${clear_file_cache_timeout_min:-${CLEAR_FILE_CACHE_TIMEOUT_MIN:-60}}"
+    clear_cache_ssh_user="${clear_cache_ssh_user:-${CLEAR_CACHE_SSH_USER:-root}}"
     vectordbbench="${vectordbbench:-false}"
 
     if [[ "${drop_database,,}" != "true" ]]; then
@@ -1008,6 +1210,37 @@ main() {
     fi
     if [[ "${plan,,}" != "true" ]]; then
         plan="false"
+    fi
+
+    clear_cache_scope="${clear_cache_scope,,}"
+    [[ "${clear_file_cache,,}" != "true" ]] && clear_file_cache="false"
+    [[ "${clear_page_cache,,}" != "true" ]] && clear_page_cache="false"
+    [[ "${clear_sys_page_cache,,}" != "true" ]] && clear_sys_page_cache="false"
+
+    if any_clear_cache_enabled; then
+        if [[ "$clear_cache_scope" != "cold" && "$clear_cache_scope" != "every_run" ]]; then
+            die "Invalid clear_cache_scope: ${clear_cache_scope} (allowed: cold, every_run)"
+        fi
+        if [ -z "${be_hosts:-}" ]; then
+            die "clear_*_cache is enabled but be_hosts is empty (set BE_HOSTS=ip1,ip2,...)"
+        fi
+        if ! [[ "$be_http_port" =~ ^[0-9]+$ ]]; then
+            die "Invalid be_http_port: ${be_http_port}"
+        fi
+        if ! [[ "$be_brpc_port" =~ ^[0-9]+$ ]]; then
+            die "Invalid be_brpc_port: ${be_brpc_port}"
+        fi
+        if ! [[ "$clear_file_cache_max_size_gb" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            die "Invalid clear_file_cache_max_size_gb: ${clear_file_cache_max_size_gb}"
+        fi
+        if ! [[ "$clear_file_cache_timeout_min" =~ ^[0-9]+$ ]]; then
+            die "Invalid clear_file_cache_timeout_min: ${clear_file_cache_timeout_min}"
+        fi
+        parse_be_hosts
+        if [ "${#BE_HOSTS_ARR[@]}" -eq 0 ]; then
+            die "be_hosts parsed to empty list: ${be_hosts}"
+        fi
+        echo "cache-clear BEs: ${BE_HOSTS_ARR[*]}"
     fi
     
     # Load and initialize engine
