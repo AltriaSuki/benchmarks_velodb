@@ -1,0 +1,27 @@
+-- tpcds sf1000
+USE tpcds_1000g;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.call_center PROPERTIES ('write-format'='orc') AS SELECT * FROM call_center;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.inventory PROPERTIES ('write-format'='orc') AS SELECT * FROM inventory;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.catalog_returns PROPERTIES ('write-format'='orc') AS SELECT * FROM catalog_returns;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.catalog_sales PROPERTIES ('write-format'='orc') AS SELECT * FROM catalog_sales;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.household_demographics PROPERTIES ('write-format'='orc') AS SELECT * FROM household_demographics;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.customer_address PROPERTIES ('write-format'='orc') AS SELECT * FROM customer_address;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.customer_demographics PROPERTIES ('write-format'='orc') AS SELECT * FROM customer_demographics;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.income_band PROPERTIES ('write-format'='orc') AS SELECT * FROM income_band;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.catalog_page PROPERTIES ('write-format'='orc') AS SELECT * FROM catalog_page;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.item PROPERTIES ('write-format'='orc') AS SELECT * FROM item;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.web_returns PROPERTIES ('write-format'='orc') AS SELECT * FROM web_returns;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.web_site PROPERTIES ('write-format'='orc') AS SELECT * FROM web_site;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.promotion PROPERTIES ('write-format'='orc') AS SELECT * FROM promotion;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.web_sales PROPERTIES ('write-format'='orc') AS SELECT * FROM web_sales;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.store PROPERTIES ('write-format'='orc') AS SELECT * FROM store;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.time_dim PROPERTIES ('write-format'='orc') AS SELECT * FROM time_dim;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.web_page PROPERTIES ('write-format'='orc') AS SELECT * FROM web_page;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.store_returns PROPERTIES ('write-format'='orc') AS SELECT * FROM store_returns;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.store_sales PROPERTIES ('write-format'='orc') AS SELECT * FROM store_sales;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.ship_mode PROPERTIES ('write-format'='orc') AS SELECT * FROM ship_mode;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.customer PROPERTIES ('write-format'='orc') AS SELECT * FROM customer;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.date_dim PROPERTIES ('write-format'='orc') AS SELECT * FROM date_dim;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.reason PROPERTIES ('write-format'='orc') AS SELECT * FROM reason;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.warehouse PROPERTIES ('write-format'='orc') AS SELECT * FROM warehouse;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_orc.dbgen_version PROPERTIES ('write-format'='orc') AS SELECT * FROM dbgen_version;

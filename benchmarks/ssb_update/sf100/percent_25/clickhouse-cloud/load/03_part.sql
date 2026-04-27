@@ -1,0 +1,1 @@
+INSERT INTO part SELECT * FROM url('https://yyq-test.s3.us-west-2.amazonaws.com/regression/ssb/sf100/part.tbl.gz', CSV)

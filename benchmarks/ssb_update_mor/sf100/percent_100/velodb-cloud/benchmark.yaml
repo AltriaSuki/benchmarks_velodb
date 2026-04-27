@@ -1,0 +1,31 @@
+# VeloDB SSB Update MoR SF100 (100%) Benchmark Configuration
+
+# Engine connection information
+engine:
+  type: "velodb"
+  connection:
+    fe_host: "${FE_HOST:-127.0.0.1}"
+    fe_http_port: "${FE_HTTP_PORT:-8030}"
+    fe_query_port: "${FE_QUERY_PORT:-9030}"
+    user: "${DB_USER:-root}"
+    password: "${PASSWORD:-}"
+    db: "${DB:-ssb}"
+
+# Benchmark parameters
+parameters:
+  load: "${LOAD:-false}"
+  query: "${QUERY:-false}"
+  query_times: "${QUERY_TIMES:-3}"
+
+# Test resource paths (relative to this YAML file)
+paths:
+  ddl: "ddl/ddl.sql"
+  load_dir: "load/"
+  query_dir: "${QUERY_DIR:-query/}" # Directory containing query SQL files
+  query_mode: "line"
+storage:
+  endpoint: "${STORAGE_ENDPOINT:-https://s3.us-east-1.amazonaws.com}"
+  region: "${STORAGE_REGION:-us-east-1}"
+  bucket: "${STORAGE_BUCKET:-bench-dataset}"
+  access_key: "${STORAGE_ACCESS_KEY:-xxx}"
+  secret_key: "${STORAGE_SECRET_KEY:-xxx}"

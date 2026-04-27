@@ -1,0 +1,14 @@
+SELECT
+    sum(LO_REVENUE),
+    FLOOR(LO_ORDERDATE / 10000) AS d_year,
+    P_BRAND
+FROM LINEORDER_FLAT
+WHERE
+    P_CATEGORY = 'MFGR#12'
+  AND S_REGION = 'AMERICA'
+GROUP BY
+    d_year,
+    P_BRAND
+ORDER BY
+    d_year,
+    P_BRAND;

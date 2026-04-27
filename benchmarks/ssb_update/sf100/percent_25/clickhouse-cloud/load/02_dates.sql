@@ -1,0 +1,1 @@
+INSERT INTO dates SELECT * FROM url('https://yyq-test.s3.us-west-2.amazonaws.com/regression/ssb/sf100/date.tbl.gz', CSV)
