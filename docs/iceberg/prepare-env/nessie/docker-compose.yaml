@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.106.0
+    container_name: nessie
+    ports:
+      - "19120:19120"
+    environment:
+      - nessie.version.store.type=${NESSIE_VERSION_STORE_TYPE}
+      - nessie.version.store.persist.rocks.database-path=${NESSIE_VERSION_STORE_ROCKS_DB_PATH}
+      - nessie.catalog.default-warehouse=${NESSIE_WAREHOUSE}
+      - nessie.catalog.warehouses.warehouse.location=${NESSIE_WAREHOUSE_LOCATION}
+      - nessie.catalog.warehouses.bench.location=${NESSIE_BENCH_LOCATION}
+      - nessie.catalog.service.s3.default-options.endpoint=${NESSIE_S3_ENDPOINT}
+      - nessie.catalog.service.s3.default-options.access-key=urn:nessie-secret:quarkus:nessie.catalog.secrets.access-key
+      - nessie.catalog.service.s3.default-options.path-style-access=false
+      - nessie.catalog.service.s3.default-options.chunked-encoding-enabled=false
+      - nessie.catalog.service.s3.default-options.auth-type=STATIC
+      - nessie.catalog.secrets.access-key.name=${NESSIE_S3_ACCESS_KEY}
+      - nessie.catalog.secrets.access-key.secret=${NESSIE_S3_SECRET_KEY}
+      - nessie.catalog.service.s3.default-options.region=${NESSIE_S3_REGION}
+      - nessie.server.authentication.enabled=false
+      - nessie.catalog.service.s3.default-options.request-signing-enabled=false
+    volumes:
+      - ./nessie-data:/data
+    networks:
+      nessie-rest:
+networks:
+  nessie-rest:
+
+# sudo mkdir -p nessie-data
+# sudo chown -R 10000:10000 nessie-data
+# sudo chmod -R 755 nessie-data

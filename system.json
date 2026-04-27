@@ -1,0 +1,22 @@
+{
+  "ClickHouse": {
+    "link": "https://clickhouse.com/",
+    "icon": "/icons/clickhouse.svg"
+  },
+  "Doris": {
+    "link": "https://doris.apache.org/",
+    "icon": "/icons/doris.ico"
+  },
+  "VeloDB": {
+    "link": "https://www.velodb.io/",
+    "icon": "/icons/velodb.ico"
+  },
+  "DuckDB": {
+    "link": "https://duckdb.org/",
+    "icon": "/icons/duckdb.ico"
+  },
+  "Snowflake": {
+    "link": "https://www.snowflake.com/",
+    "icon": "/icons/snowflake.ico"
+  }
+}

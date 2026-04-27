@@ -1,0 +1,27 @@
+-- tpcds sf1000
+USE tpcds_1000g;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.call_center PROPERTIES ('write-format'='parquet') AS SELECT * FROM call_center;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.inventory PROPERTIES ('write-format'='parquet') AS SELECT * FROM inventory;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.catalog_returns PROPERTIES ('write-format'='parquet') AS SELECT * FROM catalog_returns;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.catalog_sales PROPERTIES ('write-format'='parquet') AS SELECT * FROM catalog_sales;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.household_demographics PROPERTIES ('write-format'='parquet') AS SELECT * FROM household_demographics;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.customer_address PROPERTIES ('write-format'='parquet') AS SELECT * FROM customer_address;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.customer_demographics PROPERTIES ('write-format'='parquet') AS SELECT * FROM customer_demographics;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.income_band PROPERTIES ('write-format'='parquet') AS SELECT * FROM income_band;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.catalog_page PROPERTIES ('write-format'='parquet') AS SELECT * FROM catalog_page;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.item PROPERTIES ('write-format'='parquet') AS SELECT * FROM item;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.web_returns PROPERTIES ('write-format'='parquet') AS SELECT * FROM web_returns;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.web_site PROPERTIES ('write-format'='parquet') AS SELECT * FROM web_site;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.promotion PROPERTIES ('write-format'='parquet') AS SELECT * FROM promotion;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.web_sales PROPERTIES ('write-format'='parquet') AS SELECT * FROM web_sales;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.store PROPERTIES ('write-format'='parquet') AS SELECT * FROM store;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.time_dim PROPERTIES ('write-format'='parquet') AS SELECT * FROM time_dim;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.web_page PROPERTIES ('write-format'='parquet') AS SELECT * FROM web_page;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.store_returns PROPERTIES ('write-format'='parquet') AS SELECT * FROM store_returns;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.store_sales PROPERTIES ('write-format'='parquet') AS SELECT * FROM store_sales;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.ship_mode PROPERTIES ('write-format'='parquet') AS SELECT * FROM ship_mode;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.customer PROPERTIES ('write-format'='parquet') AS SELECT * FROM customer;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.date_dim PROPERTIES ('write-format'='parquet') AS SELECT * FROM date_dim;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.reason PROPERTIES ('write-format'='parquet') AS SELECT * FROM reason;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.warehouse PROPERTIES ('write-format'='parquet') AS SELECT * FROM warehouse;
+CREATE TABLE iceberg_nessie.tpcds_sf1000_parquet.dbgen_version PROPERTIES ('write-format'='parquet') AS SELECT * FROM dbgen_version;

@@ -1,0 +1,3 @@
+SELECT sleep(60);
+DROP STATS hits;
+ANALYZE TABLE hits WITH SYNC;
