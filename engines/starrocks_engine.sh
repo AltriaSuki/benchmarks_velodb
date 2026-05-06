@@ -142,6 +142,101 @@ engine_run_sql() {
     fi
 }
 
+# 2.2. Get row count of a loaded table
+engine_get_table_rows() {
+    local table="$1"
+    local host="${fe_host:-127.0.0.1}"
+    local port="${fe_query_port:-9030}"
+    local sys_user="${user:-root}"
+    local current_db="${db:-}"
+
+    local count
+    count="$(MYSQL_PWD="${password:-}" mysql -h"${host}" -P"${port}" -u"${sys_user}" -D"${current_db}" \
+        -N -s -e "SELECT COUNT(*) FROM ${table};" 2>/dev/null || true)"
+    count="${count%%$'\n'*}"
+    count="${count//$'\r'/}"
+
+    if [[ "$count" =~ ^[0-9]+$ ]]; then
+        echo "$count"
+    else
+        echo "0"
+    fi
+
+    return 0
+}
+
+engine_set_auto_analyze() {
+    local enabled="$1"
+    local collect="false"
+    local full_collect="false"
+    local output=""
+
+    if [ "$enabled" = "true" ]; then
+        collect="true"
+        full_collect="true"
+    fi
+
+    export MYSQL_PWD="${password:-}"
+    if ! output=$(mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -e "ADMIN SET FRONTEND CONFIG ('enable_statistic_collect'='${collect}');" 2>&1); then
+        if [[ "$output" != *"EMR"* ]]; then
+            echo "$output" >&2
+            return 1
+        fi
+    fi
+
+    if ! output=$(mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -e "ADMIN SET FRONTEND CONFIG ('enable_collect_full_statistic'='${full_collect}');" 2>&1); then
+        if [[ "$output" != *"EMR"* ]]; then
+            echo "$output" >&2
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+engine_list_tables() {
+    local db_name="$1"
+    export MYSQL_PWD="${password:-}"
+    mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -D"$db_name" -N -s -e "SHOW TABLES;" 2>/dev/null
+}
+
+engine_drop_stats() {
+    local db_name="$1"
+    local table="$2"
+    export MYSQL_PWD="${password:-}"
+    mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -D"$db_name" -e "DROP STATS ${table};" >/dev/null 2>&1
+}
+
+engine_analyze_table() {
+    local db_name="$1"
+    local table="$2"
+    local analyze_type="$3"
+    local sql=""
+
+    case "${analyze_type}" in
+        analyze_full)
+            sql="analyze full table ${table} with sync mode"
+        ;;
+        analyze_sample)
+            sql="ANALYZE sample table ${table} with sync mode PROPERTIES('statistic_sample_collect_rows'='4000000')"
+        ;;
+        analyze_no|analyze_default)
+            return 0
+        ;;
+        *)
+            echo "Unsupported analyze type for StarRocks: ${analyze_type}" >&2
+            return 1
+        ;;
+    esac
+
+    export MYSQL_PWD="${password:-}"
+    mysql -h"$fe_host" -P"$fe_query_port" -u"$user" -D"$db_name" -e "${sql};" 2>&1
+}
+
+engine_show_column_stats() {
+    return 0
+}
+
 # 3. Generate JDBC DataSource XML configuration for Starrocks
 engine_get_jdbc_datasource() {
     # Escape any special characters in the password
